@@ -5,27 +5,52 @@
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title> Website With Login & Registration </title>
+    <title>Research Grant System</title>
     <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
 
+    <!-- NAVBAR -->
     <header>
-        <h2 class="logo">Logo</h2>
+        <h2 class="logo">Research Grant System</h2>
         <nav class="navigation">
             <a href="#">Home</a>
             <a href="#">About</a>
-            <a href="#">Services</a>
             <a href="#">Contact</a>
+
+            <!-- this still opens your login popup -->
             <button class="btnLogin-popup">Login</button>
         </nav>
-            
     </header>
 
+    <!-- HERO SECTION (HOME PAGE) -->
+    <main class="hero">
+        <div class="hero-text">
+            <!-- <p class="badge">Best Coffee</p> -->
+            <h1>Manage Research Grants with Confident !</h1>
+            <p class="subtitle">
+                Comprehensive grant management platform for research institutions. Track funding, manage applications, and collaborate seamlessly.
+            </p>
+
+            <div class="hero-buttons">
+                <!-- also opens the login popup -->
+                <button class="btnLogin-popup hero-btn primary">Start Now</button>
+                <a href="#contact" class="hero-btn outline">Contact Us</a>
+            </div>
+        </div>
+
+        <div class="hero-image">
+            <!-- change coffee-cup.png to your image file name -->
+            <img src="research.png" alt="Research Grants">
+        </div>
+    </main>
+
+    <!-- LOGIN & REGISTER POPUP -->
     <div class="wrapper">
         <span class="icon-close"><ion-icon name="close"></ion-icon></span>
-        <div section class="form-box login">
+
+        <div class="form-box login">
             <h2>Login</h2>
             <form action="#">
                 <div class="input-box">
@@ -49,7 +74,7 @@
             </form>
         </div>
 
-        <div section class="form-box register">
+        <div class="form-box register">
             <h2>Registration</h2>
             <form action="#">
                 <div class="input-box">
@@ -69,7 +94,6 @@
                 </div>
                 <div class="remember-forgot">
                     <label><input type="checkbox">I agree the terms & conditions</label>
-                   
                 </div>
                 <button type="submit" class="btn">Register</button>
                 <div class="login-register">
@@ -77,12 +101,13 @@
                 </div>
             </form>
         </div>
-
     </div>
 
     <script src="script.js"></script>
-    <script type="module" src="https://unpkg.com/ionicons@4.5.10-0/dist/ionicons/ionicons.esm.js"></script>
-    <script nomodule src="https://unpkg.com/ionicons@4.5.10-0/dist/ionicons/ionicons.js"></script>
-    
+    <script type="module"
+        src="https://unpkg.com/ionicons@4.5.10-0/dist/ionicons/ionicons.esm.js"></script>
+    <script nomodule
+        src="https://unpkg.com/ionicons@4.5.10-0/dist/ionicons/ionicons.js"></script>
+
 </body>
 </html>

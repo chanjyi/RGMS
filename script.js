@@ -1,21 +1,38 @@
 const wrapper = document.querySelector('.wrapper');
 const loginLink = document.querySelector('.login-link');
 const registerLink = document.querySelector('.register-link');
-const btnPopup = document.querySelector('.btnLogin-popup');
+const btnPopups = document.querySelectorAll('.btnLogin-popup'); // all login buttons
 const iconClose = document.querySelector('.icon-close');
 
-registerLink.addEventListener('click', () => {
-    wrapper.classList.add('active');
+// Switch to Register form
+if (registerLink) {
+    registerLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        wrapper.classList.add('active');
+    });
+}
+
+// Switch back to Login form
+if (loginLink) {
+    loginLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        wrapper.classList.remove('active');
+    });
+}
+
+// Open popup from ANY login/order button
+btnPopups.forEach(btn => {
+    btn.addEventListener('click', () => {
+        wrapper.classList.add('active-popup');
+        // always show login tab first when opening
+        wrapper.classList.remove('active');
+    });
 });
 
-loginLink.addEventListener('click', () => {
-    wrapper.classList.remove('active');
-} );    
-
-btnPopup.addEventListener('click', () => {
-    wrapper.classList.add('active-popup');
-});
-
-iconClose.addEventListener('click', () => {
-    wrapper.classList.remove('active-popup');
-});
+// Close popup
+if (iconClose) {
+    iconClose.addEventListener('click', () => {
+        wrapper.classList.remove('active-popup');
+        wrapper.classList.remove('active');
+    });
+}
