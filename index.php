@@ -1,3 +1,24 @@
+<?php
+session_start();
+$errors = [
+    'login' => $_SESSION['login_error'] ?? '',
+    'register' => $_SESSION['register_error'] ?? ''
+];
+$activeForm = $_SESSION['active_form'] ?? 'login';
+
+session_unset();
+
+function showError($errors) {
+   return !empty($errors) ? '<div class="error-message">' . htmlspecialchars($errors) . '</div>' : '';
+}
+
+function isActiveForm($formName, $activeForm) {
+    return $formName === $activeForm ? 'active' : '';
+}
+
+?>
+
+
 <!DOCTYPE html>
 <html lang="en">
 
@@ -50,52 +71,64 @@
     <div class="wrapper">
         <span class="icon-close"><ion-icon name="close"></ion-icon></span>
 
-        <div class="form-box login">
+        <div class="form-box login <?= isActiveForm('login', $activeForm) ?>">
+            <form action="login_register.php" method="post">
             <h2>Login</h2>
-            <form action="#">
+            <?= showError($errors['login']) ?>
                 <div class="input-box">
                     <span class="icon"><ion-icon name="mail"></ion-icon></span>
-                    <input type="email" required>
+                    <input type="email" name="email" required>
                     <label>Email</label>
                 </div>
                 <div class="input-box">
                     <span class="icon"><ion-icon name="unlock"></ion-icon></span>
-                    <input type="password" required>
+                    <input type="password" name="password" required>
                     <label>Password</label>
                 </div>
                 <div class="remember-forgot">
                     <label><input type="checkbox">Remember me</label>
                     <a href="#">Forgot Password?</a>
                 </div>
-                <button type="submit" class="btn">Login</button>
+                <button type="submit" name="login" class="btn">Login</button>
                 <div class="login-register">
                     <p>Don't have an account? <a href="#" class="register-link">Register</a></p>
                 </div>
             </form>
         </div>
 
-        <div class="form-box register">
+        <div class="form-box register <?= isActiveForm('register', $activeForm) ?>">
+            <form action="login_register.php" method="post">
             <h2>Registration</h2>
-            <form action="#">
+            <?= showError($errors['register']) ?>
                 <div class="input-box">
                     <span class="icon"><ion-icon name="person"></ion-icon></span>
-                    <input type="text" required>
+                    <input type="text" name="name" required>
                     <label>Username</label>
                 </div>
                 <div class="input-box">
                     <span class="icon"><ion-icon name="mail"></ion-icon></span>
-                    <input type="email" required>
+                    <input type="email" name="email" required>
                     <label>Email</label>
                 </div>
                 <div class="input-box">
                     <span class="icon"><ion-icon name="unlock"></ion-icon></span>
-                    <input type="password" required>
+                    <input type="password" name="password" required>
                     <label>Password</label>
+                </div>
+                <div class="input-box">
+                    <span class="icon"><ion-icon name="shield-checkmark"></ion-icon></span>
+                    <select name="role" required>
+                        <option value="" disabled selected>Select Role</option>
+                        <option value="researcher">Researcher</option>
+                        <option value="reviewer">Reviewer</option>
+                        <option value="hod">HOD</option>
+                        <option value="admin">Admin</option>
+                    </select>
                 </div>
                 <div class="remember-forgot">
                     <label><input type="checkbox">I agree the terms & conditions</label>
                 </div>
-                <button type="submit" class="btn">Register</button>
+                <button type="submit" name="register" class="btn" >Register</button>
                 <div class="login-register">
                     <p>Already have an account? <a href="#" class="login-link">Login</a></p>
                 </div>

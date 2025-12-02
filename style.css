@@ -198,7 +198,7 @@ header {
 }
 
 .wrapper.active {
-    height: 420px;
+    height: 480px;
 }
 
 .wrapper .form-box {
@@ -290,6 +290,21 @@ header {
     padding: 0 35px 8px 0px;
 }
 
+.input-box select {
+    width: 100%;
+    background: transparent;
+    border: none;
+    outline: none;
+    font-size: 1em;
+    color: #DFD0B8;
+    font-weight: 600;
+    padding: 8px 35px 8px 0px;
+    appearance: none; /* Remove default arrow */
+    -webkit-appearance: none; /* For Safari */
+    -moz-appearance: none; /* For Firefox */
+    cursor: pointer;
+}
+
 .input-box .icon {
     position: absolute;
     right: 8px;
@@ -307,12 +322,12 @@ header {
 }
 
 .remember-forgot label input {
-    accent-color: #011402d9;
+    accent-color: #DFD0B8;
     margin-right: 3px;
 }
 
 .remember-forgot a {
-    color: #010b01d7;
+    color: #DFD0B8;
     text-decoration: none;
 }
 
@@ -346,4 +361,13 @@ header {
 .login-register a:hover {
     text-decoration: underline;
     color: #DFD0B8;
+}
+
+.error-message {
+    background-color: #ffdddd;
+    border-left: 6px solid #f44336;
+    margin-bottom: 15px;
+    padding: 10px;
+    color: #a94442;
+    border-radius: 4px;
 }
