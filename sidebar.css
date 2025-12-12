@@ -1,0 +1,118 @@
+/* Toggle Button */
+.toggle-btn {
+    position: fixed;
+    right: 20px;
+    top: 20px;
+    padding: 10px 14px;
+    font-size: 18px;
+    cursor: pointer;
+    background: #3C5B6F;      /* your color */
+    color: #DFD0B8;           /* your color */
+    border: none;
+    border-radius: 6px;
+    z-index: 1001;
+    transition: 0.3s;
+}
+
+.toggle-btn:hover {
+    background: #153448;      /* darker hover */
+}
+
+/* Sidebar Panel */
+.sidebar {
+    height: 100%;
+    width: 260px;
+    position: fixed;
+    top: 0;
+
+    right: -300px; /* fully hidden initially */
+
+    background: #153448;       /* main sidebar color */
+    padding: 20px;
+    transition: 0.35s ease;
+    z-index: 1002;
+
+    display: flex;
+    flex-direction: column;
+
+    box-shadow: -3px 0 10px rgba(0, 0, 0, 0.25);
+}
+
+/* Sidebar slides in */
+.sidebar.open {
+    right: 0;
+}
+
+/* Close Button Inside Sidebar */
+.close-btn {
+    position: absolute;
+    top: 18px;
+    left: 15px;
+    background: none;
+    border: none;
+    font-size: 26px;
+    cursor: pointer;
+    color: #DFD0B8;          /* beige */
+}
+
+.close-btn:hover {
+    color: #ffffff;
+}
+
+/* Title */
+.brand-title {
+    color: #DFD0B8;
+    text-align: center;
+    margin-top: 40px;
+    margin-bottom: 30px;
+    font-size: 22px;
+    font-weight: bold;
+}
+
+/* Menu Items */
+.menu-item {
+    display: flex;
+    align-items: center;
+    padding: 12px;
+    margin: 8px 0;
+    font-size: 18px;
+    color: #DFD0B8;
+    text-decoration: none;
+    border-radius: 6px;
+    transition: 0.3s;
+}
+
+.menu-item i {
+    font-size: 22px;
+    margin-right: 10px;
+}
+
+/* Hover effect */
+.menu-item:hover {
+    background: #3C5B6F;   /* highlight color */
+    color: #DFD0B8;
+}
+
+/* Logout at bottom */
+.logout {
+    margin-top: auto;
+    color: #DFD0B8;
+    font-weight: bold;
+}
+
+.logout:hover {
+    background: #8a6f56; /* muted beige hover */
+    color: #ffffff;
+}
+
+/* Dark overlay */
+.overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.35);
+    z-index: 1000;
+}
