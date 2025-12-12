@@ -1,3 +1,7 @@
+console.log("script.js loaded ✅");
+console.log("open btn:", document.getElementById("openSidebarBtn"));
+console.log("sidebar:", document.getElementById("sidebar"));
+
 const wrapper = document.querySelector('.wrapper');
 const loginLink = document.querySelector('.login-link');
 const registerLink = document.querySelector('.register-link');
@@ -36,3 +40,21 @@ if (iconClose) {
         wrapper.classList.remove('active');
     });
 }
+
+function openSidebar() {
+  document.getElementById("sidebar")?.classList.add("open");
+  const overlay = document.getElementById("overlay");
+  if (overlay) overlay.style.display = "block";
+}
+
+
+function closeSidebar() {
+  document.getElementById("sidebar")?.classList.remove("open");
+  const overlay = document.getElementById("overlay");
+  if (overlay) overlay.style.display = "none";
+}
+
+
+document.getElementById("openSidebarBtn")?.addEventListener("click", openSidebar);
+document.getElementById("closeSidebarBtn")?.addEventListener("click", closeSidebar);
+document.getElementById("overlay")?.addEventListener("click", closeSidebar);

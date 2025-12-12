@@ -17,12 +17,16 @@ if (!isset($_SESSION['email'] )) {
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>researcher Page</title>
         <link rel="stylesheet" href="style.css">
+     <link rel="stylesheet" href="sidebar.css">
+    <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
     </head>
+
     <body>
+    <?php include 'sidebar.php'; ?>
         <div class="container">
             <h1>Welcome, researcher!<span> <?= $_SESSION['name'];?></span></h1>
             <p>This is the researcher dashboard.</p>
-            <button onlick ="Window.location.href="logout.php" >Logout</button>
         </div>
+        <script src="script.js"></script>
     </body>
 </html>
