@@ -1,373 +1,192 @@
-@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap');
+/* GOOGLE FONTS & RESET */
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@200;300;400;500;600;700&display=swap');
 
 * {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-    font-family: 'Roboto', sans-serif;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: "Poppins", sans-serif;
 }
 
-/* ==== GLOBAL BODY ==== */
-body {
-    min-height: 100vh;
-    background: #3C5B6F;
-    color: #DFD0B8; 
+/* ===========================
+   SIDEBAR STYLES
+   =========================== */
+.sidebar {
+  position: fixed;
+  left: 0;
+  top: 0;
+  height: 100%;
+  width: 78px;
+  background: #3C5B6F; /* Sidebar Color */
+  padding: 6px 14px;
+  z-index: 999;
+  transition: all 0.5s ease;
 }
 
-/* ==== HEADER / NAVBAR ==== */
-header {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    padding: 20px 80px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    background: #153448;   
-    z-index: 99;
+.sidebar.open {
+  width: 250px;
 }
 
-.logo {
-    font-size: 24px;
-    font-weight: 700;
-    color: #fff;
-    user-select: none;
+.sidebar .logo-details {
+  height: 60px;
+  display: flex;
+  align-items: center;
+  position: relative;
 }
 
-.navigation a {
-    color: #DFD0B8;
-    text-decoration: none;
-    transition: color 0.3s ease;
+.sidebar .logo-details i {
+  color: #fff;
+  font-size: 30px;
+  margin-right: 15px;
+  cursor: pointer;
+  transition: all 0.5s ease;
+  min-width: 50px; 
+  text-align: center;
+}
+
+.sidebar .logo-details .logo_name {
+  color: #fff;
+  font-size: 22px;
+  font-weight: 600;
+  opacity: 0;
+  transition: all 0.5s ease;
+  white-space: nowrap;
+}
+
+.sidebar.open .logo-details .logo_name {
+  opacity: 1;
+}
+
+.sidebar .nav-list {
+  margin-top: 20px;
+  height: 100%;
+}
+
+.sidebar li {
+  position: relative;
+  margin: 8px 0;
+  list-style: none;
+}
+
+/* Tooltips */
+.sidebar li .tooltip {
+  position: absolute;
+  top: -20px;
+  left: calc(100% + 15px);
+  z-index: 3;
+  background: #fff;
+  box-shadow: 0 5px 10px rgba(0, 0, 0, 0.3);
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 15px;
+  font-weight: 400;
+  opacity: 0;
+  white-space: nowrap;
+  pointer-events: none;
+  transition: 0s;
+}
+
+.sidebar li:hover .tooltip {
+  opacity: 1;
+  top: 50%;
+  transform: translateY(-50%);
+  transition: all 0.4s ease;
+}
+
+.sidebar.open li .tooltip {
+  display: none;
+}
+
+/* Links & Icons */
+.sidebar li a {
+  display: flex;
+  height: 100%;
+  width: 100%;
+  border-radius: 12px;
+  align-items: center;
+  text-decoration: none;
+  transition: all 0.4s ease;
+  background: #3C5B6F;
+}
+
+.sidebar li a:hover, .sidebar li a.active {
+  background: #DFD0B8;
+}
+
+.sidebar li a i {
+  color: #fff;
+  height: 50px;
+  min-width: 50px;
+  font-size: 20px;
+  text-align: center;
+  line-height: 50px;
+}
+
+.sidebar li a:hover i, .sidebar li a.active i {
+  color: #3C5B6F;
+}
+
+.sidebar .links_name {
+  color: #fff;
+  font-size: 15px;
+  font-weight: 400;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: 0.4s;
+}
+
+.sidebar.open .links_name {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.sidebar li a:hover .links_name, .sidebar li a.active .links_name {
+  color: #3C5B6F;
+}
+
+/* ===========================
+   DASHBOARD CONTENT STYLES
+   =========================== */
+
+/* This replaces the old body styles for dashboard pages */
+.home-section {
     position: relative;
-    font-size: 14px;
+    background-color: #DFD0B8; /* Beige Background */
+    min-height: 100vh;
+    top: 0;
+    left: 78px;
+    width: calc(100% - 78px);
+    transition: all 0.5s ease;
+    z-index: 1;
+    padding: 40px;
+    color: #153448; /* Dark Blue Text */
+}
+
+/* Headers */
+.home-section .welcome-text {
+    color: #153448;
+    font-size: 30px;
+    font-weight: 600;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* Role text */
+.home-section .welcome-text span {
+    font-size: 18px;
     font-weight: 400;
-    margin: 0 15px;
-}
-
-.navigation a::after {
-    content: '';
-    position: absolute;
-    left: 0;
-    bottom: -6px;
-    width: 100%;
-    height: 2px;
-    background: #f8f0ea;
-    transform-origin: right;
-    border-radius: 5px;
-    transform: scaleX(0);
-    transition: transform 0.2s;
-}
-
-.navigation a:hover::after {
-    transform-origin: left;
-    transform: scaleX(1);
-}
-
-/* LOGIN BUTTON IN NAV */
-.navigation .btnLogin-popup {
-    width: 120px;
-    height: 40px;
-    background: transparent;
-    border: 2px solid #DFD0B8;
-    outline: none;
-    border-radius: 999px;
-    cursor: pointer;
-    font-size: 14px;
-    font-weight: 500;
-    margin-left: 30px;
-    color: #DFD0B8;
-    transition: 0.2s;
-}
-
-.navigation .btnLogin-popup:hover {
-    background-color: #DFD0B8;
     color: #3C5B6F;
 }
 
-/* ==== HERO SECTION ==== */
-.hero {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 140px 80px 60px;   /* top padding so it clears the fixed header */
-    gap: 40px;
-}
-
-.hero-text {
-    max-width: 480px;
-}
-
-.badge {
-    color: #DFD0B8;
-    font-weight: 700;
-    font-size: 20px;
-    margin-bottom: 16px;
-}
-
-.hero-text h1 {
-    font-size: 52px;
-    line-height: 1.3;
-    margin-bottom: 18px;
-    color: #DFD0B8;
-}
-
-.subtitle {
-    font-size: 18px;
-    line-height: 1.7;
-    color: #948979;
-    margin-bottom: 26px;
-}
-
-.hero-buttons {
-    display: flex;
-    gap: 18px;
-    flex-wrap: wrap;
-}
-
-.hero-btn {
-    padding: 16px 40px;
-    border-radius: 999px;
-    border: 2px solid transparent;
-    font-size: 18px;
-    cursor: pointer;
-    text-decoration: none;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.hero-btn.primary {
-    background: #DFD0B8;
+/* General Text Elements */
+.home-section p, 
+.home-section li, 
+.home-section td,
+.home-section label {
     color: #153448;
-    border-color: #DFD0B8;
-}
-
-.hero-btn.primary:hover {
-     background: #CBBFA5;
-}
-
-.hero-btn.outline {
-    background: transparent;
-    border-color: #948979;
-    color: #DFD0B8;
-}
-
-.hero-btn.outline:hover {
-    background: rgba(246, 231, 221, 0.1);
-}
-
-.hero-image {
-    width: auto;
-    max-width: none;
-    flex: 1;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-}
-
-.hero-image img {
-    max-width: 400px;
-    width: 100%;
-    border-radius: 24px;
-}
-
-/* ==== LOGIN / REGISTER POPUP ==== */
-
-.wrapper {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    width: 400px;
-    height: 400px;
-    background: #153448;   /* darker *//* #948979 with opacity */
-    border: 2px solid #DFD0B8;
-    border-radius: 20px;
-    backdrop-filter: blur(20px);
-    box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    overflow: hidden;
-    transform: translate(-50%, -50%) scale(0);
-    transition: height 0.2s ease, transform 0.2s ease;
-}
-
-.wrapper.active-popup {
-    transform: translate(-50%, -50%) scale(1);
-}
-
-.wrapper.active {
-    height: 480px;
-}
-
-.wrapper .form-box {
-    width: 100%;
-    padding: 40px;
-}
-
-.wrapper .form-box.login {
-    transition: transform 0.18s ease;
-    transform: translateX(0);
-}
-
-.wrapper.active .form-box.login {
-    transition: none;
-    transform: translateX(-400px);
-}
-
-.wrapper .form-box.register {
-    position: absolute;
-    transition: none;
-    transform: translateX(400px);
-}
-
-.wrapper.active .form-box.register {
-    transition: transform 0.18s ease;
-    transform: translateX(0);
-}
-
-.wrapper .icon-close {
-    position: absolute;
-    top: 0;
-    right: 0;
-    width: 45px;
-    height: 45px;
-    font-size: 2em;
-    color: white;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    border-bottom-left-radius: 20px;
-    cursor: pointer;
-    z-index: 1;
-}
-
-.form-box h2 {
-    font-size: 28px;
-    color: #DFD0B8;
-    text-align: center;
-}
-
-.input-box {
-    position: relative;
-    width: 100%;
-    border-bottom: 2px solid #DFD0B8;
-    margin: 30px 0;
-}
-
-.input-box label {
-    position: absolute;
-    top: 50%;
-    left: 5px;
-    color: #DFD0B8;
-    transform: translateY(-50%);
-    font-size: 1em;
-    pointer-events: none;
-    transition: 0.2s;
-}
-
-.input-box input:focus ~ label,
-.input-box input:valid ~ label {
-    top: -5px;
-    color: #DFD0B8;
-    font-size: 0.8em;
-}
-
-/* make underline glow slightly when typing */
-.input-box input:focus {
-    border-bottom: 2px solid #C9B99A ;
-}
-
-.input-box input {
-    width: 100%;
-    background: transparent;
-    border: none;
-    outline: none;
-    font-size: 1em;
-    color: #DFD0B8;
-    font-weight: 600;
-    padding: 0 35px 8px 0px;
-}
-
-.input-box select {
-    width: 100%;
-    background: transparent;
-    border: none;
-    outline: none;
-    font-size: 1em;
-    color: #DFD0B8;
-    font-weight: 600;
-    padding: 8px 35px 8px 0px;
-    appearance: none; /* Remove default arrow */
-    -webkit-appearance: none; /* For Safari */
-    -moz-appearance: none; /* For Firefox */
-    cursor: pointer;
-}
-
-.input-box .icon {
-    position: absolute;
-    right: 8px;
-    font-size: 1.2em;
-    color: #DFD0B8;
-}
-
-.remember-forgot {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 0.9em;
-    color: #DFD0B8;
-    margin: -15px 0 15px 0;
-}
-
-.remember-forgot label input {
-    accent-color: #DFD0B8;
-    margin-right: 3px;
-}
-
-.remember-forgot a {
-    color: #DFD0B8;
-    text-decoration: none;
-}
-
-.btn {
-    width: 100%;
-    height: 45px;
-    background: #092635;
-    border: none;
-    outline: none;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 1em;
-    font-weight: 500;
-    color: #DFD0B8;
-}
-
-.login-register {
-    text-align: center;
-    font-size: 0.9em;
-    font-weight: 500;
-    color: #DFD0B8;
-    margin: 20px 0 10px;
-}
-
-.login-register a {
-    color: #DFD0B8;
-    text-decoration: none;
-    font-weight: 600;
-}
-
-.login-register a:hover {
-    text-decoration: underline;
-    color: #DFD0B8;
-}
-
-.error-message {
-    background-color: #ffdddd;
-    border-left: 6px solid #f44336;
-    margin-bottom: 15px;
-    padding: 10px;
-    color: #a94442;
-    border-radius: 4px;
+    font-size: 16px;
+    line-height: 1.6;
 }
