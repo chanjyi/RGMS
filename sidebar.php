@@ -2,35 +2,47 @@
 $current = basename($_SERVER['PHP_SELF']);
 ?>
 
-<!-- Toggle Button -->
-<button class="toggle-btn" id="openSidebarBtn" onclick="openSidebar()">☰</button>
+<div class="sidebar" id="sidebar">
+    <div class="logo-details">
+        <i class='bx bx-menu' id="btn" onclick="toggleSidebar()"></i>
+        <span class="logo_name">RGMS</span>
+    </div>
 
+    <ul class="nav-list">
+        <li>
+            <a href="dashboard.php" class="<?= $current == 'dashboard.php' ? 'active' : '' ?>">
+                <i class='bx bx-grid-alt'></i>
+                <span class="links_name">Dashboard</span>
+            </a>
+            <span class="tooltip">Dashboard</span>
+        </li>
 
-<!-- Sidebar -->
-<aside id="sidebar" class="sidebar">
-  <button class="close-btn" id="closeSidebarBtn" onclick="closeSidebar()">×</button>
+        <li>
+            <a href="profile.php" class="<?= $current == 'profile.php' ? 'active' : '' ?>">
+                <i class='bx bx-user'></i>
+                <span class="links_name">Profile</span>
+            </a>
+            <span class="tooltip">Profile</span>
+        </li>
 
+        <li>
+            <a href="settings.php" class="<?= $current == 'settings.php' ? 'active' : '' ?>">
+                <i class='bx bx-cog'></i>
+                <span class="links_name">Settings</span>
+            </a>
+            <span class="tooltip">Settings</span>
+        </li>
 
-  <h2 class="brand-title">My System</h2>
+        <li class="profile">
+            <a href="logout.php">
+                <i class='bx bx-log-out' id="log_out"></i>
+                <span class="links_name">Logout</span>
+            </a>
+        </li>
+    </ul>
+</div>
 
-  <a href="admin.php" class="menu-item <?= $current=='admin.php'?'active':'' ?>">
-    <i class='bx bx-home'></i> Home
-  </a>
-
-  <a href="admin.php" class="menu-item">
-    <i class='bx bx-grid-alt'></i> Dashboard
-  </a>
-
-  <a href="#" class="menu-item">
-    <i class='bx bx-cog'></i> Settings
-  </a>
-
-  <hr>
-
-  <a href="logout.php" class="menu-item logout">
-    <i class='bx bx-log-out'></i> Logout
-  </a>
-</aside>
-
-<!-- Background Overlay -->
-<div id="overlay" class="overlay"></div>
+<div id="overlay" onclick="toggleSidebar()" 
+     style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 998;">
+</div>
+<script src="script.js"></script>

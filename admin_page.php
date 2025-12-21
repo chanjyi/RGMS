@@ -16,19 +16,26 @@ if (!isset($_SESSION['email'] )) {
         <meta http-equiv="X-UA-Compatible" content="IE=edge">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Admin Page</title>
-        <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="sidebar.css">
+    <link rel="stylesheet" href="style.css">
     <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
     </head>
 
     <body>
-    <?php include 'sidebar.php'; ?>
-        <div class="container">
-            <h1>Welcome, Admin!<span><?= $_SESSION['name'];?></span></h1>
-            <p>This is the admin dashboard.</p>
+
+        <?php include 'sidebar.php'; ?>
+
+        <section class="home-section">
             
-        </div>
-        <script src="script.js"></script>
+            <div class="welcome-text">
+                Welcome <?= $_SESSION['name']; ?>, 
+                <span>(<?= isset($_SESSION['role']) ? $_SESSION['role'] : 'User'; ?>)</span>
+            </div>
+
+            <hr style="border: 1px solid #3C5B6F; opacity: 0.3; margin-bottom: 20px;">
+
+            <p>This is the content area. Start building your tables or forms here.</p>
+
+            </section>
 
     </body>
 </html>
