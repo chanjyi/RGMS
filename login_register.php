@@ -74,6 +74,7 @@ if (isset($_POST['login'])) {
             $_SESSION['name'] = $user['name'];
             $_SESSION['role'] = $user['role'];
             $_SESSION['email'] = $user['email'];
+            $_SESSION['profile_pic'] = $row['profile_pic'];
 
 
             // Redirect based on role
