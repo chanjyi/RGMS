@@ -1,50 +1,76 @@
 <?php
 session_start();
-require 'config.php'; // Make sure you include your database connection!
+require 'config.php';
 
-// 1. SECURITY: Check if Admin
-if (!isset($_SESSION['email'])) {
+// 1. Security Check
+if (!isset($_SESSION['email']) || $_SESSION['role'] != 'admin') {
     header('Location: index.php');
     exit();
 }
 
 $message = "";
 
-// 2. LOGIC: Handle the "Assign" Button
+// ==========================================
+// 2. LOGIC: ASSIGN NEW PROPOSAL
+// ==========================================
 if (isset($_POST['assign_proposal'])) {
-    $proposal_title = $_POST['proposal_title'];
-    $reviewer_email = $_POST['reviewer_email'];
+    $prop_id = $_POST['proposal_id'];
+    $reviewer_id = $_POST['reviewer_id'];
 
-    // A. (Optional) In a real app, you would insert the proposal into a 'proposals' table here.
-    // For this demo, we skip that and just send the notification.
-
-    // B. SEND NOTIFICATION
-    // Check if the user has System Notifications turned ON (default is 1)
-    $check_pref = $conn->prepare("SELECT notify_system FROM users WHERE email = ?");
-    $check_pref->bind_param("s", $reviewer_email);
-    $check_pref->execute();
-    $pref = $check_pref->get_result()->fetch_assoc();
-
-    // If preference is 1 (ON) or not set (default), send the alert
-    if (!$pref || $pref['notify_system'] == 1) {
-        $notif_msg = "New Assignment: You have been assigned to review '" . $proposal_title . "'";
+    // Insert into REVIEWS table
+    $stmt = $conn->prepare("INSERT INTO reviews (proposal_id, reviewer_id, status, assigned_date, type) VALUES (?, ?, 'Pending', NOW(), 'Proposal')");
+    $stmt->bind_param("ii", $prop_id, $reviewer_id);
+    
+    if ($stmt->execute()) {
+        $conn->query("UPDATE proposals SET status = 'ASSIGNED' WHERE id = $prop_id");
         
-        $stmt = $conn->prepare("INSERT INTO notifications (user_email, message) VALUES (?, ?)");
-        $stmt->bind_param("ss", $reviewer_email, $notif_msg);
-        
-        if ($stmt->execute()) {
-            $message = "Proposal assigned & notification sent to " . $reviewer_email;
-        } else {
-            $message = "Error sending notification.";
-        }
+        // Notify Reviewer
+        $rev_q = $conn->query("SELECT email FROM users WHERE id = $reviewer_id");
+        $rev_email = $rev_q->fetch_assoc()['email'];
+        $conn->query("INSERT INTO notifications (user_email, message) VALUES ('$rev_email', 'New Assignment: You have been assigned a proposal.')");
+
+        $message = "Proposal assigned successfully!";
     } else {
-        $message = "Proposal assigned (User has notifications muted).";
+        $message = "Error assigning proposal.";
     }
 }
 
-// 3. GET REVIEWERS: Fetch list of users with role 'Reviewer' for the dropdown
-// (Assuming your users table has a 'role' column. If not, remove the 'WHERE role...' part)
-$reviewers = $conn->query("SELECT * FROM users WHERE role = 'Reviewer'"); 
+// ==========================================
+// 3. LOGIC: ASSIGN APPEAL CASE
+// ==========================================
+if (isset($_POST['assign_appeal'])) {
+    $prop_id = $_POST['proposal_id'];
+    $reviewer_id = $_POST['reviewer_id'];
+
+    // Insert Review Record (Type = Appeal)
+    $stmt = $conn->prepare("INSERT INTO reviews (proposal_id, reviewer_id, status, assigned_date, type) VALUES (?, ?, 'Pending', NOW(), 'Appeal')");
+    $stmt->bind_param("ii", $prop_id, $reviewer_id);
+    
+    if ($stmt->execute()) {
+        // Update Proposal (Set Priority High)
+        $conn->query("UPDATE proposals SET status = 'ASSIGNED', priority = 'High' WHERE id = $prop_id");
+
+        // Notify Reviewer (RED notification text)
+        $rev_q = $conn->query("SELECT email FROM users WHERE id = $reviewer_id");
+        $rev_email = $rev_q->fetch_assoc()['email'];
+        $msg = "Appeal Case: You have been assigned to review proposal #$prop_id.";
+        
+        $notif = $conn->prepare("INSERT INTO notifications (user_email, message) VALUES (?, ?)");
+        $notif->bind_param("ss", $rev_email, $msg);
+        $notif->execute();
+
+        $message = "Appeal assigned successfully.";
+    } else {
+        $message = "Error assigning appeal.";
+    }
+}
+
+// ==========================================
+// 4. FETCH DATA FOR DROPDOWNS
+// ==========================================
+$reviewers = $conn->query("SELECT * FROM users WHERE role = 'Reviewer' ORDER BY name ASC");
+$new_proposals = $conn->query("SELECT * FROM proposals WHERE status = 'SUBMITTED'");
+$appeals = $conn->query("SELECT * FROM proposals WHERE status = 'APPEALED'");
 ?>
 
 <!DOCTYPE html>
@@ -61,48 +87,83 @@ $reviewers = $conn->query("SELECT * FROM users WHERE role = 'Reviewer'");
 
     <section class="home-section">
         
-        <div class="welcome-text">
-            Welcome <?= $_SESSION['name']; ?>, 
-            <span>(<?= isset($_SESSION['role']) ? $_SESSION['role'] : 'User'; ?>)</span>
-        </div>
-
-        <hr style="border: 1px solid #3C5B6F; opacity: 0.3; margin: 20px 0;">
+        <div class="welcome-text">Admin Dashboard</div>
+        <hr style="opacity: 0.3; margin: 20px 0;">
 
         <?php if ($message): ?>
-            <div class="alert success" style="background: #d4edda; color: #155724; padding: 15px; margin-bottom: 20px; border-radius: 5px;">
+            <div class="alert" style="background: #d4edda; color: #155724; padding: 15px; margin-bottom: 20px; border-radius: 5px;">
                 <?= $message ?>
             </div>
         <?php endif; ?>
 
-        <div style="background: #EFE6D5; padding: 30px; border-radius: 20px; max-width: 600px;">
-            <h2 style="color: #153448; margin-bottom: 20px;">Assign Proposal to Reviewer</h2>
+        <div class="form-box" style="margin-bottom: 30px;">
+            <h3 style="color: #153448; margin-bottom: 15px;">Assign New Proposal</h3>
             
-            <form method="POST" action="">
-                
-                <div style="margin-bottom: 15px;">
-                    <label style="display: block; margin-bottom: 5px; font-weight: 600;">Proposal Title</label>
-                    <input type="text" name="proposal_title" placeholder="e.g. AI in Healthcare Research" required 
-                           style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 5px;">
-                </div>
-
-                <div style="margin-bottom: 20px;">
-                    <label style="display: block; margin-bottom: 5px; font-weight: 600;">Select Reviewer</label>
-                    <select name="reviewer_email" required style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 5px;">
-                        <option value="">-- Choose a Reviewer --</option>
-                        <?php while($row = $reviewers->fetch_assoc()): ?>
-                            <option value="<?= $row['email'] ?>">
-                                <?= $row['name'] ?> (<?= $row['email'] ?>)
-                            </option>
+            <?php if ($new_proposals->num_rows > 0): ?>
+            <form method="POST">
+                <div class="input-group">
+                    <label>Proposal</label>
+                    <select name="proposal_id" required>
+                        <?php while($row = $new_proposals->fetch_assoc()): ?>
+                            <option value="<?= $row['id'] ?>"><?= htmlspecialchars($row['title']) ?> (<?= $row['researcher_email'] ?>)</option>
                         <?php endwhile; ?>
                     </select>
                 </div>
 
-                <button type="submit" name="assign_proposal" class="btn-save" 
-                        style="background: #3C5B6F; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-size: 16px;">
-                    Assign Proposal
-                </button>
+                <div class="input-group">
+                    <label>Reviewer</label>
+                    <select name="reviewer_id" required>
+                        <option value="">-- Choose Reviewer --</option>
+                        <?php 
+                        // Reset pointer to use reviewers list again later
+                        $reviewers->data_seek(0); 
+                        while($r = $reviewers->fetch_assoc()): 
+                        ?>
+                            <option value="<?= $r['id'] ?>"><?= $r['name'] ?></option>
+                        <?php endwhile; ?>
+                    </select>
+                </div>
 
+                <button type="submit" name="assign_proposal" class="btn-save">Assign</button>
             </form>
+            <?php else: ?>
+                <p style="color: #666; font-style: italic;">No new proposals waiting.</p>
+            <?php endif; ?>
+        </div>
+
+        <div class="form-box" style="border-left: 5px solid #dc3545;">
+            <h3 style="color: #dc3545; margin-bottom: 15px;">Assign Appeal Cases</h3>
+            
+            <?php if ($appeals->num_rows > 0): ?>
+            <form method="POST">
+                <div class="input-group">
+                    <label>Appeal Case</label>
+                    <select name="proposal_id" required>
+                        <?php while($row = $appeals->fetch_assoc()): ?>
+                            <option value="<?= $row['id'] ?>"><?= htmlspecialchars($row['title']) ?> (<?= $row['researcher_email'] ?>)</option>
+                        <?php endwhile; ?>
+                    </select>
+                </div>
+
+                <div class="input-group">
+                    <label>Assign to Reviewer</label>
+                    <select name="reviewer_id" required>
+                        <option value="">-- Choose Reviewer --</option>
+                        <?php 
+                        // Reset pointer again
+                        $reviewers->data_seek(0); 
+                        while($r = $reviewers->fetch_assoc()): 
+                        ?>
+                            <option value="<?= $r['id'] ?>"><?= $r['name'] ?></option>
+                        <?php endwhile; ?>
+                    </select>
+                </div>
+
+                <button type="submit" name="assign_appeal" class="btn-save" style="background: #dc3545;">Assign Appeal</button>
+            </form>
+            <?php else: ?>
+                <p style="color: #666; font-style: italic;">No active appeals.</p>
+            <?php endif; ?>
         </div>
 
     </section>
