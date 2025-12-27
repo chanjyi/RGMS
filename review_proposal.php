@@ -105,6 +105,10 @@ if (isset($_POST['submit_review'])) {
         <a href="reviewer_page.php" class="btn-back"><i class='bx bx-arrow-back'></i> Back</a>
         
         <h1>Reviewing: <?= htmlspecialchars($data['title']) ?></h1>
+        <button type="button" onclick="document.getElementById('reportModal').style.display='block'" 
+            style="background-color: #dc3545; color: white; padding: 8px 15px; border: none; border-radius: 5px; cursor: pointer; float: right; margin-top: -40px;">
+            <i class='bx bx-flag'></i> Report Misconduct
+        </button>
         
         <?php if($data['review_type'] == 'Appeal'): ?>
             <div class="alert error" style="display:inline-block; padding: 5px 10px; margin-bottom: 20px; background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb;">
@@ -151,5 +155,44 @@ if (isset($_POST['submit_review'])) {
             </form>
         </div>
     </section>
+    <div id="reportModal" style="display:none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5);">
+  <div style="background-color: #fff; margin: 10% auto; padding: 25px; border-radius: 10px; width: 500px; position: relative; box-shadow: 0 5px 15px rgba(0,0,0,0.3);">
+    
+    <h3 style="color: #dc3545; margin-top: 0;">Report Misconduct</h3>
+    <p style="font-size: 14px; color: #666; margin-bottom: 20px;">
+        Reporting Researcher: <strong><?= htmlspecialchars($data['researcher_email']) ?></strong>
+    </p>
+    
+    <form action="submit_report.php" method="POST">
+        <input type="hidden" name="proposal_id" value="<?= $data['prop_id'] ?>">
+        <input type="hidden" name="researcher_email" value="<?= htmlspecialchars($data['researcher_email']) ?>">
+      <input type="hidden" name="proposal_title" value="<?= htmlspecialchars($data['title']) ?>">
+
+      <label style="display:block; margin-bottom: 5px; font-weight: bold;">Violation Category</label>
+      <select name="category" required style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 5px; margin-bottom: 15px;">
+        <option value="" disabled selected>-- Select Violation --</option>
+        <option value="Plagiarism">Plagiarism</option>
+        <option value="Data Fabrication">Data Fabrication</option>
+        <option value="Falsification">Falsification</option>
+        <option value="Unethical Conduct">Unethical Conduct</option>
+        <option value="Other">Other</option>
+      </select>
+
+      <label style="display:block; margin-bottom: 5px; font-weight: bold;">Details / Evidence</label>
+      <textarea name="details" rows="5" required style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 5px; margin-bottom: 20px;" placeholder="Describe the misconduct..."></textarea>
+
+      <div style="text-align: right;">
+          <button type="button" onclick="document.getElementById('reportModal').style.display='none'" 
+              style="background: #ccc; color: #333; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; margin-right: 10px;">
+              Cancel
+          </button>
+          <button type="submit" name="submit_report" 
+              style="background: #dc3545; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer;">
+              Submit Report
+          </button>
+      </div>
+    </form>
+  </div>
+</div>
 </body>
 </html>
