@@ -11,6 +11,7 @@ $message = "";
 $error = "";
 $view = $_GET['view'] ?? 'menu';
 $email = $_SESSION['email']; 
+$role = $_SESSION['role'] ?? 'researcher'; // Get User Role
 
 // ==========================================
 // 1. LOGIC: UPDATE PROFILE
@@ -25,11 +26,10 @@ if (isset($_POST['update_profile'])) {
         
         if ($stmt->execute()) {
             $_SESSION['name'] = $new_name;      
-            $_SESSION['username'] = $new_name; 
             $_SESSION['profile_pic'] = $selected_avatar;
             $message = "Profile updated successfully!";
             $view = 'profile'; 
-        }else {
+        } else {
             $error = "Database update failed.";
             $view = 'profile';
         }
@@ -115,14 +115,27 @@ if (isset($_POST['update_email'])) {
 }
 
 // ==========================================
-// 4. LOGIC: NOTIFICATIONS
+// 4. LOGIC: NOTIFICATIONS (ROLE BASED)
 // ==========================================
 if (isset($_POST['update_notifications'])) {
-    $notify_email  = isset($_POST['notify_email']) ? 1 : 0;
-    $notify_system = isset($_POST['notify_system']) ? 1 : 0;
+    
+    if ($role == 'reviewer') {
+        // Update Reviewer Specific Columns
+        $n_assign  = isset($_POST['notify_new_assign']) ? 1 : 0;
+        $n_appeal  = isset($_POST['notify_appeals']) ? 1 : 0;
+        $n_approve = isset($_POST['notify_hod_approve']) ? 1 : 0;
+        $n_reject  = isset($_POST['notify_hod_reject']) ? 1 : 0;
 
-    $stmt = $conn->prepare("UPDATE users SET notify_email = ?, notify_system = ? WHERE email = ?");
-    $stmt->bind_param("iis", $notify_email, $notify_system, $email);
+        $stmt = $conn->prepare("UPDATE users SET notify_new_assign=?, notify_appeals=?, notify_hod_approve=?, notify_hod_reject=? WHERE email=?");
+        $stmt->bind_param("iiiis", $n_assign, $n_appeal, $n_approve, $n_reject, $email);
+    } else {
+        // Update Generic Columns (Researcher)
+        $n_email = isset($_POST['notify_email']) ? 1 : 0;
+        
+        // We use the 'notify_email' column for generic researchers
+        $stmt = $conn->prepare("UPDATE users SET notify_email=? WHERE email=?");
+        $stmt->bind_param("is", $n_email, $email);
+    }
 
     if ($stmt->execute()) {
         $message = "Notification preferences saved!";
@@ -136,22 +149,22 @@ if (isset($_POST['update_notifications'])) {
 // ==========================================
 // FINAL: FETCH USER DATA
 // ==========================================
-$query = "SELECT name, profile_pic, notify_email, notify_system FROM users WHERE email = ?";
+$query = "SELECT name, profile_pic, notify_email, notify_new_assign, notify_appeals, notify_hod_approve, notify_hod_reject FROM users WHERE email = ?";
 $stmt = $conn->prepare($query);
-
-if ($stmt) {
-    $stmt->bind_param("s", $email);
-    $stmt->execute();
-    $user_data = $stmt->get_result()->fetch_assoc();
-} else {
-    die("Database Error: " . $conn->error);
-}
+$stmt->bind_param("s", $email);
+$stmt->execute();
+$user_data = $stmt->get_result()->fetch_assoc();
 
 // Set Defaults
 $current_pic = !empty($user_data['profile_pic']) ? $user_data['profile_pic'] : 'default.png';
-$current_name = $user_data['name'] ?? 'User'; // CHANGED variable name
-$email_on = $user_data['notify_email'] ?? 1;
-$system_on = $user_data['notify_system'] ?? 1;
+$current_name = $user_data['name'] ?? 'User';
+
+// Notification Values
+$assign_on  = $user_data['notify_new_assign'] ?? 1;
+$appeal_on  = $user_data['notify_appeals'] ?? 1;
+$approve_on = $user_data['notify_hod_approve'] ?? 1;
+$reject_on  = $user_data['notify_hod_reject'] ?? 1;
+$email_on   = $user_data['notify_email'] ?? 1;
 ?>
 
 <!DOCTYPE html>
@@ -167,8 +180,11 @@ $system_on = $user_data['notify_system'] ?? 1;
     <?php include 'sidebar.php'; ?>
 
     <section class="home-section">
-        <div class="settings-container">
-            
+        <div class="welcome-text">Settings</div>
+        <hr style="opacity: 0.3; margin: 20px 0;">
+        
+        <div class="form-box" style="max-width: 800px; margin: 0 auto;">
+
             <?php if ($message): ?>
                 <div class="alert success" style="background:#d4edda; color:#155724; padding:15px; border-radius:10px; margin-bottom:20px;"><?= $message ?></div>
             <?php endif; ?>
@@ -177,7 +193,6 @@ $system_on = $user_data['notify_system'] ?? 1;
             <?php endif; ?>
 
             <?php if ($view === 'menu'): ?>
-                <h1>Settings</h1>
                 <p style="margin-bottom: 30px;">Manage your account preferences.</p>
 
                 <a href="settings.php?view=profile" class="settings-nav-btn">
@@ -198,7 +213,7 @@ $system_on = $user_data['notify_system'] ?? 1;
             <?php elseif ($view === 'profile'): ?>
                 
                 <a href="settings.php" class="btn-back"><i class='bx bx-arrow-back'></i> Back to Settings</a>
-                <h1>Edit Profile</h1>
+                <h2>Edit Profile</h2>
 
                 <form action="settings.php?view=profile" method="POST" class="profile-form">
                     
@@ -238,38 +253,78 @@ $system_on = $user_data['notify_system'] ?? 1;
             <?php elseif ($view === 'notifications'): ?>
                 
                 <a href="settings.php" class="btn-back"><i class='bx bx-arrow-back'></i> Back to Settings</a>
-                <h1>Notification Preferences</h1>
-                <p style="margin-bottom: 30px;">Control how you receive alerts from RGMS.</p>
+                <h2>Notification Preferences</h2>
+                <p style="margin-bottom: 30px;">Customize what alerts you receive.</p>
 
                 <form method="POST" action="settings.php?view=notifications">
-                    <div class="settings-nav-btn" style="cursor: default;">
-                        <div>
-                            <span style="display:block; font-weight:600;">Application Status</span>
-                            <span style="font-size: 13px; font-weight:normal; color:#666;">Get notified when grant status changes</span>
+                    
+                    <?php if ($role == 'reviewer'): ?>
+                        
+                        <div class="settings-nav-btn" style="cursor: default;">
+                            <div>
+                                <span style="display:block; font-weight:600;">New Assignments</span>
+                                <span style="font-size: 13px; font-weight:normal; color:#666;">Get notified when a new proposal is assigned to you</span>
+                            </div>
+                            <label class="switch">
+                                <input type="checkbox" name="notify_new_assign" <?= $assign_on ? 'checked' : '' ?>>
+                                <span class="slider"></span>
+                            </label>
                         </div>
-                        <label class="switch">
-                            <input type="checkbox" name="notify_email" <?= $email_on ? 'checked' : '' ?>>
-                            <span class="slider"></span>
-                        </label>
-                    </div>
 
-                    <div class="settings-nav-btn" style="cursor: default;">
-                        <div>
-                            <span style="display:block; font-weight:600;">Deadline Reminders</span>
-                            <span style="font-size: 13px; font-weight:normal; color:#666;">Receive alerts for upcoming due dates</span>
+                        <div class="settings-nav-btn" style="cursor: default;">
+                            <div>
+                                <span style="display:block; font-weight:600;">Appeal Alerts</span>
+                                <span style="font-size: 13px; font-weight:normal; color:#666;">Receive alerts when a researcher appeals a decision</span>
+                            </div>
+                            <label class="switch">
+                                <input type="checkbox" name="notify_appeals" <?= $appeal_on ? 'checked' : '' ?>>
+                                <span class="slider"></span>
+                            </label>
                         </div>
-                        <label class="switch">
-                            <input type="checkbox" name="notify_system" <?= $system_on ? 'checked' : '' ?>>
-                            <span class="slider"></span>
-                        </label>
-                    </div>
+
+                        <div class="settings-nav-btn" style="cursor: default;">
+                            <div>
+                                <span style="display:block; font-weight:600;">HOD Approvals</span>
+                                <span style="font-size: 13px; font-weight:normal; color:#666;">Notify me when HOD approves a proposal I reviewed</span>
+                            </div>
+                            <label class="switch">
+                                <input type="checkbox" name="notify_hod_approve" <?= $approve_on ? 'checked' : '' ?>>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+
+                        <div class="settings-nav-btn" style="cursor: default;">
+                            <div>
+                                <span style="display:block; font-weight:600;">HOD Rejections</span>
+                                <span style="font-size: 13px; font-weight:normal; color:#666;">Notify me when HOD rejects a proposal I reviewed</span>
+                            </div>
+                            <label class="switch">
+                                <input type="checkbox" name="notify_hod_reject" <?= $reject_on ? 'checked' : '' ?>>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+
+                    <?php else: ?>
+                        
+                        <div class="settings-nav-btn" style="cursor: default;">
+                            <div>
+                                <span style="display:block; font-weight:600;">General Notifications</span>
+                                <span style="font-size: 13px; font-weight:normal; color:#666;">Receive general system alerts and status updates</span>
+                            </div>
+                            <label class="switch">
+                                <input type="checkbox" name="notify_email" <?= $email_on ? 'checked' : '' ?>>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        
+                    <?php endif; ?>
 
                     <button type="submit" name="update_notifications" class="btn-save" style="margin-top: 20px;">Save Preferences</button>
                 </form>
 
             <?php elseif ($view === 'security'): ?>
                 <a href="settings.php" class="btn-back"><i class='bx bx-arrow-back'></i> Back to Settings</a>
-                <h1>Account Security</h1>
+                <h2>Account Security</h2>
                 
                 <div class="profile-form" style="margin-bottom: 30px; text-align: left;">
                     <h3>Change Password</h3>
