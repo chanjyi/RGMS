@@ -26,16 +26,41 @@ $data = $q->get_result()->fetch_assoc();
 
 if (!$data) die("Review not found.");
 
-// 2. HANDLE FORM SUBMISSION
+
+// 2. HANDLE "REQUEST AMENDMENT"
+if (isset($_POST['request_amendment'])) {
+    $amend_feedback = $_POST['amendment_comments'];
+    $prop_id = $data['prop_id'];
+
+    // A. Update Proposal Status + Feedback
+    // Note: We do NOT mark the review as 'Completed' yet, because we are waiting for resubmission.
+    $upd_prop = $conn->prepare("UPDATE proposals SET status = 'REQUIRES_AMENDMENT', reviewer_feedback = ? WHERE id = ?");
+    $upd_prop->bind_param("si", $amend_feedback, $prop_id);
+
+    if ($upd_prop->execute()) {
+        // B. Notify Researcher
+        $res_email = $data['researcher_email'];
+        $msg = "Action Required: The reviewer requested amendments on '$data[title]'. Please check the dashboard.";
+        $notif = $conn->prepare("INSERT INTO notifications (user_email, message) VALUES (?, ?)");
+        $notif->bind_param("ss", $res_email, $msg);
+        $notif->execute();
+
+        header("Location: reviewer_page.php?msg=amendment_sent");
+        exit();
+    } else {
+        die("Error sending amendment request: " . $conn->error);
+    }
+}
+
+
+// 3. HANDLE FINAL DECISION (Recommend / Reject)
 if (isset($_POST['submit_review'])) {
     $feedback = $_POST['feedback'];
     $decision = $_POST['decision']; // 'RECOMMEND' or 'REJECT'
     $prop_id = $data['prop_id'];
-    
-    // Check priority checkbox
     $priority = isset($_POST['priority']) ? 'High' : 'Normal';
 
-    // File Upload
+    // File Upload (Annotated PDF)
     $annotated_path = NULL;
     if (!empty($_FILES['annotated_pdf']['name'])) {
         $target_dir = "uploads/reviews/";
@@ -57,12 +82,7 @@ if (isset($_POST['submit_review'])) {
             $final_status = 'RECOMMENDED';
             $final_priority = $priority; 
         } else {
-            // Rejection Logic
-            if ($is_appeal_case) {
-                $final_status = 'APPEAL_REJECTED';
-            } else {
-                $final_status = 'REJECTED';
-            }
+            $final_status = $is_appeal_case ? 'APPEAL_REJECTED' : 'REJECTED';
             $final_priority = 'Normal'; 
         }
 
@@ -75,18 +95,13 @@ if (isset($_POST['submit_review'])) {
             // D. NOTIFY RESEARCHER
             $res_email = $data['researcher_email'];
             $msg = "Update on '$data[title]': Your proposal status is now " . strtolower($final_status) . ".";
-            
             $notif = $conn->prepare("INSERT INTO notifications (user_email, message) VALUES (?, ?)");
             $notif->bind_param("ss", $res_email, $msg);
             $notif->execute();
             
             header("Location: reviewer_page.php");
             exit();
-        } else {
-            die("Error Updating Proposal Status: " . $conn->error); 
         }
-    } else {
-        die("Error Saving Review: " . $conn->error);
     }
 }
 ?>
@@ -105,6 +120,7 @@ if (isset($_POST['submit_review'])) {
         <a href="reviewer_page.php" class="btn-back"><i class='bx bx-arrow-back'></i> Back</a>
         
         <h1>Reviewing: <?= htmlspecialchars($data['title']) ?></h1>
+        
         <button type="button" onclick="document.getElementById('reportModal').style.display='block'" 
             style="background-color: #dc3545; color: white; padding: 8px 15px; border: none; border-radius: 5px; cursor: pointer; float: right; margin-top: -40px;">
             <i class='bx bx-flag'></i> Report Misconduct
@@ -125,8 +141,8 @@ if (isset($_POST['submit_review'])) {
             <form method="POST" enctype="multipart/form-data">
                 
                 <div class="input-group">
-                    <label>Written Feedback</label>
-                    <textarea name="feedback" rows="5" required></textarea>
+                    <label>Written Feedback (For Final Decision)</label>
+                    <textarea name="feedback" rows="5"></textarea>
                 </div>
 
                 <div class="input-group">
@@ -141,58 +157,83 @@ if (isset($_POST['submit_review'])) {
                     </label>
                 </div>
 
-                <div style="display:flex; gap:15px;">
-                    <button type="submit" name="decision" value="RECOMMEND" class="btn-success btn-action">
-                        <i class='bx bx-check-circle'></i> Recommend
-                    </button>
+                <div class="action-buttons-container">
                     
-                    <button type="submit" name="decision" value="REJECT" class="btn-danger btn-action">
-                        <i class='bx bx-x-circle'></i> Reject
-                    </button>
+                    <div style="display: flex; gap: 10px;">
+                        <button type="submit" name="decision" value="RECOMMEND" class="btn-success btn-action">
+                            <i class='bx bx-check-circle'></i> Recommend
+                        </button>
+
+                        <button type="button" onclick="document.getElementById('amendmentModal').style.display='block'" class="btn-warning btn-action">
+                            <i class='bx bx-edit'></i> Request Amendment
+                        </button>
+                    </div>
+
+                    <div class="btn-reject-group">
+                        <button type="submit" name="decision" value="REJECT" class="btn-danger btn-action">
+                            <i class='bx bx-x-circle'></i> Reject
+                        </button>
+                    </div>
+                    
                 </div>
                 
                 <input type="hidden" name="submit_review" value="1">
             </form>
         </div>
     </section>
-    <div id="reportModal" style="display:none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5);">
-  <div style="background-color: #fff; margin: 10% auto; padding: 25px; border-radius: 10px; width: 500px; position: relative; box-shadow: 0 5px 15px rgba(0,0,0,0.3);">
-    
-    <h3 style="color: #dc3545; margin-top: 0;">Report Misconduct</h3>
-    <p style="font-size: 14px; color: #666; margin-bottom: 20px;">
-        Reporting Researcher: <strong><?= htmlspecialchars($data['researcher_email']) ?></strong>
-    </p>
-    
-    <form action="submit_report.php" method="POST">
-        <input type="hidden" name="proposal_id" value="<?= $data['prop_id'] ?>">
-        <input type="hidden" name="researcher_email" value="<?= htmlspecialchars($data['researcher_email']) ?>">
-      <input type="hidden" name="proposal_title" value="<?= htmlspecialchars($data['title']) ?>">
 
-      <label style="display:block; margin-bottom: 5px; font-weight: bold;">Violation Category</label>
-      <select name="category" required style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 5px; margin-bottom: 15px;">
-        <option value="" disabled selected>-- Select Violation --</option>
-        <option value="Plagiarism">Plagiarism</option>
-        <option value="Data Fabrication">Data Fabrication</option>
-        <option value="Falsification">Falsification</option>
-        <option value="Unethical Conduct">Unethical Conduct</option>
-        <option value="Other">Other</option>
-      </select>
+    <div id="reportModal" class="modal">
+      <div class="modal-content">
+        <span class="close-btn" onclick="document.getElementById('reportModal').style.display='none'">&times;</span>
+        <h3 style="color: #dc3545; margin-top: 0;">Report Misconduct</h3>
+        <p style="font-size: 14px; color: #666; margin-bottom: 20px;">
+            Reporting Researcher: <strong><?= htmlspecialchars($data['researcher_email']) ?></strong>
+        </p>
+        
+        <form action="submit_report.php" method="POST">
+            <input type="hidden" name="proposal_id" value="<?= $data['prop_id'] ?>">
+            <input type="hidden" name="researcher_email" value="<?= htmlspecialchars($data['researcher_email']) ?>">
+            <input type="hidden" name="proposal_title" value="<?= htmlspecialchars($data['title']) ?>">
 
-      <label style="display:block; margin-bottom: 5px; font-weight: bold;">Details / Evidence</label>
-      <textarea name="details" rows="5" required style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 5px; margin-bottom: 20px;" placeholder="Describe the misconduct..."></textarea>
+          <label style="display:block; margin-bottom: 5px; font-weight: bold;">Violation Category</label>
+          <select name="category" required style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 5px; margin-bottom: 15px;">
+            <option value="" disabled selected>-- Select Violation --</option>
+            <option value="Plagiarism">Plagiarism</option>
+            <option value="Data Fabrication">Data Fabrication</option>
+            <option value="Falsification">Falsification</option>
+            <option value="Other">Other</option>
+          </select>
 
-      <div style="text-align: right;">
-          <button type="button" onclick="document.getElementById('reportModal').style.display='none'" 
-              style="background: #ccc; color: #333; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; margin-right: 10px;">
-              Cancel
-          </button>
-          <button type="submit" name="submit_report" 
-              style="background: #dc3545; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer;">
-              Submit Report
-          </button>
+          <label style="display:block; margin-bottom: 5px; font-weight: bold;">Details / Evidence</label>
+          <textarea name="details" rows="5" required style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 5px; margin-bottom: 20px;"></textarea>
+
+          <div style="text-align: right;">
+              <button type="submit" name="submit_report" class="btn-danger btn-action">Submit Report</button>
+          </div>
+        </form>
       </div>
-    </form>
-  </div>
-</div>
+    </div>
+
+    <div id="amendmentModal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" onclick="document.getElementById('amendmentModal').style.display='none'">&times;</span>
+            <h3 style="color: #f39c12; margin-top: 0;">Request Amendment</h3>
+            <p style="font-size: 14px; color: #666; margin-bottom: 20px;">
+                Specify exactly what needs to be changed. The researcher will be notified to resubmit.
+            </p>
+            
+            <form method="POST">
+                <textarea name="amendment_comments" rows="5" required placeholder="E.g., The budget methodology is unclear..." 
+                          style="width:100%; padding:10px; border:1px solid #ccc; border-radius:5px; margin-bottom:15px;"></textarea>
+                
+                <div style="text-align: right;">
+                    <button type="submit" name="request_amendment" class="btn-warning btn-action">
+                        Send Request
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
 </body>
 </html>
