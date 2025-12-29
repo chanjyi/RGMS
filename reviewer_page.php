@@ -108,7 +108,7 @@ $history = $hist_stmt->get_result();
     <?php include 'sidebar.php'; ?>
     <section class="home-section">
         <div class="welcome-text">
-            Reviewer Dashboard <span style="font-size:12px; background:#3C5B6F; color:white; padding:2px 5px; border-radius:3px;">v2</span>
+            Reviewer Dashboard 
         </div>
         <hr style="opacity: 0.3; margin: 20px 0;">
 

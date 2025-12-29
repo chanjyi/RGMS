@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Dec 27, 2025 at 08:13 PM
+-- Generation Time: Dec 29, 2025 at 05:19 PM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.0.30
 
@@ -82,7 +82,9 @@ INSERT INTO `notifications` (`id`, `user_email`, `message`, `is_read`, `created_
 (48, '2@mail.com', 'Update on \'Hello World\': Your proposal status is now appeal_rejected.', 0, '2025-12-26 19:52:58', 'info'),
 (50, '4@mail.com', 'ALERT: Misconduct reported by 1@mail.com against 2@mail.com. Category: Plagiarism', 0, '2025-12-27 16:54:55', 'alert'),
 (51, '4@mail.com', 'ALERT: Misconduct reported by 1@mail.com against 2@mail.com. Category: Plagiarism', 0, '2025-12-27 18:03:10', 'alert'),
-(52, '4@mail.com', 'ALERT: Misconduct reported by 1@mail.com against 2@mail.com. Category: Data Fabrication', 0, '2025-12-27 18:10:19', 'alert');
+(52, '4@mail.com', 'ALERT: Misconduct reported by 1@mail.com against 2@mail.com. Category: Data Fabrication', 0, '2025-12-27 18:10:19', 'alert'),
+(53, '4@mail.com', 'New Proposal Submitted: \'new\' by 2@mail.com', 0, '2025-12-29 16:06:10', 'info'),
+(54, '1@mail.com', 'New Assignment: You have been assigned a proposal.', 0, '2025-12-29 16:06:21', 'info');
 
 -- --------------------------------------------------------
 
@@ -96,21 +98,23 @@ CREATE TABLE `proposals` (
   `researcher_email` varchar(255) NOT NULL,
   `file_path` varchar(255) NOT NULL,
   `reviewer_email` varchar(255) DEFAULT NULL,
-  `status` enum('SUBMITTED','ASSIGNED','RECOMMENDED','APPROVED','REJECTED','APPEALED','APPEAL_REJECTED') DEFAULT 'SUBMITTED',
+  `status` enum('SUBMITTED','ASSIGNED','PENDING_REVIEW','REQUIRES_AMENDMENT','RESUBMITTED','RECOMMEND','REJECTED','APPROVED','APPEALED','APPEAL_REJECTED') DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
-  `priority` enum('Normal','High') DEFAULT 'Normal'
+  `priority` enum('Normal','High') DEFAULT 'Normal',
+  `reviewer_feedback` text DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
 -- Dumping data for table `proposals`
 --
 
-INSERT INTO `proposals` (`id`, `title`, `researcher_email`, `file_path`, `reviewer_email`, `status`, `created_at`, `priority`) VALUES
-(1, 'Hello World', '2@mail.com', 'uploads/prop_1766775766_2_mail_com.pdf', NULL, 'APPEAL_REJECTED', '2025-12-26 19:02:46', 'Normal'),
-(2, 'Approval', '2@mail.com', 'uploads/prop_1766776144_2_mail_com.pdf', NULL, 'APPROVED', '2025-12-26 19:09:04', 'Normal'),
-(3, 'Recommended', '2@mail.com', 'uploads/prop_1766776494_2_mail_com.pdf', NULL, 'APPROVED', '2025-12-26 19:14:54', 'Normal'),
-(5, 'Rejected HOD', '2@mail.com', 'uploads/prop_1766777657_2_mail_com.pdf', NULL, 'REJECTED', '2025-12-26 19:34:17', 'Normal'),
-(6, 'Rejected HOD', '2@mail.com', 'uploads/prop_1766777728_2_mail_com.pdf', NULL, 'ASSIGNED', '2025-12-26 19:35:28', 'Normal');
+INSERT INTO `proposals` (`id`, `title`, `researcher_email`, `file_path`, `reviewer_email`, `status`, `created_at`, `priority`, `reviewer_feedback`) VALUES
+(1, 'Hello World', '2@mail.com', 'uploads/prop_1766775766_2_mail_com.pdf', NULL, 'APPEAL_REJECTED', '2025-12-26 19:02:46', 'Normal', NULL),
+(2, 'Approval', '2@mail.com', 'uploads/prop_1766776144_2_mail_com.pdf', NULL, 'APPROVED', '2025-12-26 19:09:04', 'Normal', NULL),
+(3, 'Recommended', '2@mail.com', 'uploads/prop_1766776494_2_mail_com.pdf', NULL, 'APPROVED', '2025-12-26 19:14:54', 'Normal', NULL),
+(5, 'Rejected HOD', '2@mail.com', 'uploads/prop_1766777657_2_mail_com.pdf', NULL, 'REJECTED', '2025-12-26 19:34:17', 'Normal', NULL),
+(6, 'Rejected HOD', '2@mail.com', 'uploads/prop_1766777728_2_mail_com.pdf', NULL, 'ASSIGNED', '2025-12-26 19:35:28', 'Normal', NULL),
+(7, 'new', '2@mail.com', 'uploads/prop_1767024370_2_mail_com.pdf', NULL, 'ASSIGNED', '2025-12-29 16:06:10', 'Normal', NULL);
 
 -- --------------------------------------------------------
 
@@ -143,7 +147,8 @@ INSERT INTO `reviews` (`id`, `reviewer_id`, `proposal_id`, `status`, `assigned_d
 (7, 1, 6, '', '2025-12-27', 'Proposal', NULL, NULL, NULL, NULL),
 (8, 1, 1, 'Completed', '2025-12-27', 'Appeal', 'baadddd', NULL, 'REJECT', '2025-12-27 03:44:27'),
 (10, 1, 1, 'Completed', '2025-12-27', 'Appeal', 'bad', NULL, 'RECOMMEND', '2025-12-27 03:48:24'),
-(13, 1, 1, 'Completed', '2025-12-27', 'Appeal', 'bad', NULL, 'REJECT', '2025-12-27 03:52:58');
+(13, 1, 1, 'Completed', '2025-12-27', 'Appeal', 'bad', NULL, 'REJECT', '2025-12-27 03:52:58'),
+(14, 1, 7, 'Pending', '2025-12-30', 'Proposal', NULL, NULL, NULL, NULL);
 
 -- --------------------------------------------------------
 
@@ -226,19 +231,19 @@ ALTER TABLE `misconduct_reports`
 -- AUTO_INCREMENT for table `notifications`
 --
 ALTER TABLE `notifications`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=53;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=55;
 
 --
 -- AUTO_INCREMENT for table `proposals`
 --
 ALTER TABLE `proposals`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
 
 --
 -- AUTO_INCREMENT for table `reviews`
 --
 ALTER TABLE `reviews`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=14;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=15;
 
 --
 -- AUTO_INCREMENT for table `users`
