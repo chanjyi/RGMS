@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Dec 29, 2025 at 05:19 PM
+-- Generation Time: Jan 04, 2026 at 09:53 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.0.30
 
@@ -84,7 +84,26 @@ INSERT INTO `notifications` (`id`, `user_email`, `message`, `is_read`, `created_
 (51, '4@mail.com', 'ALERT: Misconduct reported by 1@mail.com against 2@mail.com. Category: Plagiarism', 0, '2025-12-27 18:03:10', 'alert'),
 (52, '4@mail.com', 'ALERT: Misconduct reported by 1@mail.com against 2@mail.com. Category: Data Fabrication', 0, '2025-12-27 18:10:19', 'alert'),
 (53, '4@mail.com', 'New Proposal Submitted: \'new\' by 2@mail.com', 0, '2025-12-29 16:06:10', 'info'),
-(54, '1@mail.com', 'New Assignment: You have been assigned a proposal.', 0, '2025-12-29 16:06:21', 'info');
+(54, '1@mail.com', 'New Assignment: You have been assigned a proposal.', 0, '2025-12-29 16:06:21', 'info'),
+(55, '4@mail.com', 'New Proposal Submitted: \'trying\' by 2@mail.com', 0, '2026-01-04 06:22:31', 'info'),
+(56, '1@mail.com', 'New Assignment: You have been assigned a proposal.', 0, '2026-01-04 06:22:46', 'info'),
+(57, '2@mail.com', 'Update on \'trying\': Your proposal status is now recommended.', 0, '2026-01-04 06:23:18', 'info'),
+(58, '2@mail.com', 'Update on \'new\': Your proposal status is now recommended.', 0, '2026-01-04 06:23:23', 'info'),
+(59, '4@mail.com', 'New Proposal Submitted: \'test\' by 2@mail.com', 0, '2026-01-04 06:32:00', 'info'),
+(60, '1@mail.com', 'New Assignment: You have been assigned a proposal.', 0, '2026-01-04 06:32:09', 'info'),
+(61, '2@mail.com', 'Update on \'test\': Your proposal status is now recommend.', 0, '2026-01-04 06:38:41', 'info'),
+(62, '4@mail.com', 'New Proposal Submitted: \'urgent\' by 2@mail.com', 0, '2026-01-04 06:41:06', 'info'),
+(63, '1@mail.com', 'New Assignment: You have been assigned a proposal.', 0, '2026-01-04 06:41:18', 'info'),
+(64, '2@mail.com', 'Update on \'urgent\': Your proposal status is now recommend.', 0, '2026-01-04 06:42:57', 'info'),
+(65, '4@mail.com', 'New Proposal Submitted: \'check feedback\' by 2@mail.com', 0, '2026-01-04 06:54:12', 'info'),
+(66, '1@mail.com', 'New Assignment: You have been assigned a proposal.', 0, '2026-01-04 06:54:26', 'info'),
+(67, '2@mail.com', 'Update on \'check feedback\': Your proposal status is now recommend.', 0, '2026-01-04 07:07:16', 'info'),
+(68, '4@mail.com', 'New Proposal Submitted: \'request amendment\' by 2@mail.com', 0, '2026-01-04 07:16:21', 'info'),
+(69, '1@mail.com', 'New Assignment: You have been assigned a proposal.', 0, '2026-01-04 07:16:32', 'info'),
+(70, '2@mail.com', 'Action Required: The reviewer requested amendments on \'request amendment\'. Please check the dashboard.', 0, '2026-01-04 07:17:43', 'info'),
+(71, '2@mail.com', 'Action Required: The reviewer requested amendments on \'request amendment\'. Please check the dashboard.', 0, '2026-01-04 07:24:41', 'info'),
+(72, '4@mail.com', 'New Proposal Submitted: \'feedback sequence\' by 2@mail.com', 0, '2026-01-04 07:33:14', 'info'),
+(73, '1@mail.com', 'New Assignment: You have been assigned a proposal.', 0, '2026-01-04 07:33:26', 'info');
 
 -- --------------------------------------------------------
 
@@ -114,7 +133,13 @@ INSERT INTO `proposals` (`id`, `title`, `researcher_email`, `file_path`, `review
 (3, 'Recommended', '2@mail.com', 'uploads/prop_1766776494_2_mail_com.pdf', NULL, 'APPROVED', '2025-12-26 19:14:54', 'Normal', NULL),
 (5, 'Rejected HOD', '2@mail.com', 'uploads/prop_1766777657_2_mail_com.pdf', NULL, 'REJECTED', '2025-12-26 19:34:17', 'Normal', NULL),
 (6, 'Rejected HOD', '2@mail.com', 'uploads/prop_1766777728_2_mail_com.pdf', NULL, 'ASSIGNED', '2025-12-26 19:35:28', 'Normal', NULL),
-(7, 'new', '2@mail.com', 'uploads/prop_1767024370_2_mail_com.pdf', NULL, 'ASSIGNED', '2025-12-29 16:06:10', 'Normal', NULL);
+(7, 'new', '2@mail.com', 'uploads/prop_1767024370_2_mail_com.pdf', NULL, '', '2025-12-29 16:06:10', 'High', NULL),
+(8, 'trying', '2@mail.com', 'uploads/prop_1767507751_2_mail_com.pdf', NULL, '', '2026-01-04 06:22:31', 'Normal', NULL),
+(9, 'test', '2@mail.com', 'uploads/prop_1767508320_2_mail_com.pdf', NULL, 'RECOMMEND', '2026-01-04 06:32:00', 'Normal', NULL),
+(10, 'urgent', '2@mail.com', 'uploads/prop_1767508866_2_mail_com.pdf', NULL, 'RECOMMEND', '2026-01-04 06:41:06', 'High', NULL),
+(11, 'check feedback', '2@mail.com', 'uploads/prop_1767509652_2_mail_com.pdf', NULL, 'RECOMMEND', '2026-01-04 06:54:12', 'Normal', NULL),
+(12, 'request amendment', '2@mail.com', 'uploads/prop_1767510981_2_mail_com.pdf', NULL, 'REQUIRES_AMENDMENT', '2026-01-04 07:16:21', 'Normal', 'not good enough'),
+(13, 'feedback sequence', '2@mail.com', 'uploads/prop_1767511994_2_mail_com.pdf', NULL, 'ASSIGNED', '2026-01-04 07:33:14', 'Normal', NULL);
 
 -- --------------------------------------------------------
 
@@ -131,7 +156,7 @@ CREATE TABLE `reviews` (
   `type` enum('Proposal','Appeal') DEFAULT 'Proposal',
   `feedback` text DEFAULT NULL,
   `annotated_file` varchar(255) DEFAULT NULL,
-  `decision` enum('RECOMMEND','REJECT') DEFAULT NULL,
+  `decision` enum('RECOMMEND','REJECT','AMENDMENT') DEFAULT NULL,
   `review_date` datetime DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
@@ -148,7 +173,13 @@ INSERT INTO `reviews` (`id`, `reviewer_id`, `proposal_id`, `status`, `assigned_d
 (8, 1, 1, 'Completed', '2025-12-27', 'Appeal', 'baadddd', NULL, 'REJECT', '2025-12-27 03:44:27'),
 (10, 1, 1, 'Completed', '2025-12-27', 'Appeal', 'bad', NULL, 'RECOMMEND', '2025-12-27 03:48:24'),
 (13, 1, 1, 'Completed', '2025-12-27', 'Appeal', 'bad', NULL, 'REJECT', '2025-12-27 03:52:58'),
-(14, 1, 7, 'Pending', '2025-12-30', 'Proposal', NULL, NULL, NULL, NULL);
+(14, 1, 7, 'Completed', '2025-12-30', 'Proposal', '', NULL, 'RECOMMEND', '2026-01-04 14:23:23'),
+(15, 1, 8, 'Completed', '2026-01-04', 'Proposal', '', NULL, 'RECOMMEND', '2026-01-04 14:23:18'),
+(16, 1, 9, 'Completed', '2026-01-04', 'Proposal', '', NULL, 'RECOMMEND', '2026-01-04 14:38:41'),
+(17, 1, 10, 'Completed', '2026-01-04', 'Proposal', '', NULL, 'RECOMMEND', '2026-01-04 14:42:57'),
+(18, 1, 11, 'Completed', '2026-01-04', 'Proposal', NULL, NULL, 'RECOMMEND', '2026-01-04 15:07:16'),
+(19, 1, 12, 'Completed', '2026-01-04', 'Proposal', 'not good enough', NULL, 'AMENDMENT', '2026-01-04 15:24:41'),
+(20, 1, 13, 'Pending', '2026-01-04', 'Proposal', NULL, NULL, NULL, NULL);
 
 -- --------------------------------------------------------
 
@@ -231,19 +262,19 @@ ALTER TABLE `misconduct_reports`
 -- AUTO_INCREMENT for table `notifications`
 --
 ALTER TABLE `notifications`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=55;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=74;
 
 --
 -- AUTO_INCREMENT for table `proposals`
 --
 ALTER TABLE `proposals`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=14;
 
 --
 -- AUTO_INCREMENT for table `reviews`
 --
 ALTER TABLE `reviews`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=15;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=21;
 
 --
 -- AUTO_INCREMENT for table `users`

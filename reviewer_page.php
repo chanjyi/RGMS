@@ -196,9 +196,9 @@ $history = $hist_stmt->get_result();
 
                                 <td>
                                     <?php if($row['review_status'] == 'Reported'): ?>
-                                        <span class="status-badge rejected" style="background:#000; color:#fff;">
-                                            <i class='bx bxs-flag-alt'></i> Reported
-                                        </span>
+                                        <span class="status-badge rejected" style="background:#000; color:#fff;">Reported</span>
+                                    <?php elseif($row['decision'] == 'AMENDMENT'): ?>
+                                        <span class="status-badge requires_amendment">REQUESTED AMENDMENT</span>
                                     <?php else: ?>
                                         <span class="status-badge <?= $row['decision'] == 'RECOMMEND' ? 'approved' : 'rejected' ?>">
                                             <?= $row['decision'] ?>
@@ -207,23 +207,35 @@ $history = $hist_stmt->get_result();
                                 </td>
 
                                 <td>
-                                    <?php if($row['review_status'] == 'Reported'): ?>
+                                    <?php 
+                                    // 1. If Reported -> "Under Investigation"
+                                    if($row['review_status'] == 'Reported'): ?>
                                         <span style="color: #888;">Under Investigation</span>
-                                    <?php else: ?>
-                                        <span class="status-badge <?= strtolower($row['final_status']) ?>">
+                                    
+                                    <?php 
+                                    // 2. If Amendment -> BLANK (As requested)
+                                    elseif($row['decision'] == 'AMENDMENT'): ?>
+                                        <span></span> 
+
+                                    <?php 
+                                    // 3. If Pending HOD -> "Pending"
+                                    elseif ($row['final_status'] == 'RECOMMEND'): ?>
+                                        <span class="status-badge assigned">Pending</span>
+
+                                    <?php 
+                                    // 4. Otherwise -> Approved/Rejected
+                                    else: ?>
+                                        <?php $badge_class = strtolower($row['final_status']); ?>
+                                        <span class="status-badge <?= $badge_class ?>">
                                             <?= str_replace('_', ' ', $row['final_status']) ?>
                                         </span>
                                     <?php endif; ?>
                                 </td>
 
-                                <td style="max-width: 300px;">
-                                    <?php if($row['review_status'] == 'Reported'): ?>
-                                        <em style="color:#666;">(Confidential Report Submitted)</em>
-                                    <?php else: ?>
-                                        <div style="background: #f9f9f9; padding: 10px; border-radius: 5px; border: 1px solid #eee; font-size: 13px; max-height: 80px; overflow-y: auto;">
-                                            <?= nl2br(htmlspecialchars($row['feedback'])) ?>
-                                        </div>
-                                    <?php endif; ?>
+                                <td>
+                                    <div style="background: #f9f9f9; padding: 10px; border-radius: 5px; border: 1px solid #eee; font-size: 13px; max-height: 80px; overflow-y: auto;">
+                                        <?= nl2br(htmlspecialchars($row['feedback'])) ?>
+                                    </div>
                                 </td>
 
                                 <td style="font-size: 13px;">

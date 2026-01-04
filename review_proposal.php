@@ -26,81 +26,80 @@ $data = $q->get_result()->fetch_assoc();
 
 if (!$data) die("Review not found.");
 
-
-// 2. HANDLE "REQUEST AMENDMENT"
-if (isset($_POST['request_amendment'])) {
-    $amend_feedback = $_POST['amendment_comments'];
-    $prop_id = $data['prop_id'];
-
-    // A. Update Proposal Status + Feedback
-    // Note: We do NOT mark the review as 'Completed' yet, because we are waiting for resubmission.
-    $upd_prop = $conn->prepare("UPDATE proposals SET status = 'REQUIRES_AMENDMENT', reviewer_feedback = ? WHERE id = ?");
-    $upd_prop->bind_param("si", $amend_feedback, $prop_id);
-
-    if ($upd_prop->execute()) {
-        // B. Notify Researcher
-        $res_email = $data['researcher_email'];
-        $msg = "Action Required: The reviewer requested amendments on '$data[title]'. Please check the dashboard.";
-        $notif = $conn->prepare("INSERT INTO notifications (user_email, message) VALUES (?, ?)");
-        $notif->bind_param("ss", $res_email, $msg);
-        $notif->execute();
-
-        header("Location: reviewer_page.php?msg=amendment_sent");
-        exit();
-    } else {
-        die("Error sending amendment request: " . $conn->error);
-    }
-}
-
-
-// 3. HANDLE FINAL DECISION (Recommend / Reject)
-if (isset($_POST['submit_review'])) {
-    $feedback = $_POST['feedback'];
-    $decision = $_POST['decision']; // 'RECOMMEND' or 'REJECT'
-    $prop_id = $data['prop_id'];
-    $priority = isset($_POST['priority']) ? 'High' : 'Normal';
-
-    // File Upload (Annotated PDF)
-    $annotated_path = NULL;
-    if (!empty($_FILES['annotated_pdf']['name'])) {
-        $target_dir = "uploads/reviews/";
-        if (!is_dir($target_dir)) mkdir($target_dir, 0777, true);
-        $annotated_path = $target_dir . "rev_" . time() . "_" . basename($_FILES['annotated_pdf']['name']);
-        move_uploaded_file($_FILES['annotated_pdf']['tmp_name'], $annotated_path);
-    }
-
-    // A. UPDATE reviews table
-    $upd_rev = $conn->prepare("UPDATE reviews SET feedback = ?, annotated_file = ?, decision = ?, status = 'Completed', review_date = NOW() WHERE id = ?");
-    $upd_rev->bind_param("sssi", $feedback, $annotated_path, $decision, $review_id);
+// ==========================================
+// 2. UNIFIED FORM HANDLING
+// ==========================================
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action_type'])) {
     
-    if ($upd_rev->execute()) {
-        
-        // B. DETERMINE FINAL STATUS
-        $is_appeal_case = ($data['review_type'] == 'Appeal');
+    $action  = $_POST['action_type']; // Values: RECOMMEND, REJECT, AMENDMENT
+    $feedback = $_POST['feedback'];
+    $prop_id = $data['prop_id'];
+    
+    // --- CASE A: AMENDMENT REQUEST ---
+    if ($action == 'AMENDMENT') {
+        // Update Proposal
+        $upd_prop = $conn->prepare("UPDATE proposals SET status = 'REQUIRES_AMENDMENT', reviewer_feedback = ? WHERE id = ?");
+        $upd_prop->bind_param("si", $feedback, $prop_id);
 
-        if ($decision == 'RECOMMEND') {
-            $final_status = 'RECOMMENDED';
-            $final_priority = $priority; 
-        } else {
-            $final_status = $is_appeal_case ? 'APPEAL_REJECTED' : 'REJECTED';
-            $final_priority = 'Normal'; 
+        // Update Review (Mark Completed)
+        $upd_rev = $conn->prepare("UPDATE reviews SET status = 'Completed', decision = 'AMENDMENT', feedback = ?, review_date = NOW() WHERE id = ?");
+        $upd_rev->bind_param("si", $feedback, $review_id);
+
+        if ($upd_prop->execute() && $upd_rev->execute()) {
+            // Notify
+            $msg = "Action Required: The reviewer requested amendments on '$data[title]'. Please check the dashboard.";
+            $notif = $conn->prepare("INSERT INTO notifications (user_email, message) VALUES (?, ?)");
+            $notif->bind_param("ss", $data['researcher_email'], $msg);
+            $notif->execute();
+
+            header("Location: reviewer_page.php?msg=amendment_sent");
+            exit();
+        }
+    } 
+    
+    // --- CASE B: RECOMMEND OR REJECT ---
+    else {
+        $priority = (isset($_POST['priority']) && $action == 'RECOMMEND') ? 'High' : 'Normal';
+        $annotated_path = NULL;
+        
+        // Handle File Upload
+        if (!empty($_FILES['annotated_pdf']['name'])) {
+            $target_dir = "uploads/reviews/";
+            if (!is_dir($target_dir)) mkdir($target_dir, 0777, true);
+            $annotated_path = $target_dir . "rev_" . time() . "_" . basename($_FILES['annotated_pdf']['name']);
+            move_uploaded_file($_FILES['annotated_pdf']['tmp_name'], $annotated_path);
         }
 
-        // C. UPDATE PROPOSAL STATUS
-        $upd_prop = $conn->prepare("UPDATE proposals SET status = ?, priority = ? WHERE id = ?");
-        $upd_prop->bind_param("ssi", $final_status, $final_priority, $prop_id);
+        // Update Reviews Table
+        $upd_rev = $conn->prepare("UPDATE reviews SET feedback = ?, annotated_file = ?, decision = ?, status = 'Completed', review_date = NOW() WHERE id = ?");
+        $upd_rev->bind_param("sssi", $feedback, $annotated_path, $action, $review_id);
         
-        if ($upd_prop->execute()) {
+        if ($upd_rev->execute()) {
+            // Determine Final Status
+            $is_appeal_case = ($data['review_type'] == 'Appeal');
             
-            // D. NOTIFY RESEARCHER
-            $res_email = $data['researcher_email'];
-            $msg = "Update on '$data[title]': Your proposal status is now " . strtolower($final_status) . ".";
-            $notif = $conn->prepare("INSERT INTO notifications (user_email, message) VALUES (?, ?)");
-            $notif->bind_param("ss", $res_email, $msg);
-            $notif->execute();
+            if ($action == 'RECOMMEND') {
+                $final_status = 'RECOMMEND'; // Wait for HOD
+                $final_priority = $priority; 
+            } else {
+                $final_status = $is_appeal_case ? 'APPEAL_REJECTED' : 'REJECTED';
+                $final_priority = 'Normal'; 
+            }
+
+            // Update Proposal
+            $upd_prop = $conn->prepare("UPDATE proposals SET status = ?, priority = ? WHERE id = ?");
+            $upd_prop->bind_param("ssi", $final_status, $final_priority, $prop_id);
             
-            header("Location: reviewer_page.php");
-            exit();
+            if ($upd_prop->execute()) {
+                // Notify
+                $msg = "Update on '$data[title]': Your proposal status is now " . strtolower($final_status) . ".";
+                $notif = $conn->prepare("INSERT INTO notifications (user_email, message) VALUES (?, ?)");
+                $notif->bind_param("ss", $data['researcher_email'], $msg);
+                $notif->execute();
+                
+                header("Location: reviewer_page.php");
+                exit();
+            }
         }
     }
 }
@@ -113,127 +112,143 @@ if (isset($_POST['submit_review'])) {
     <title>Review Proposal</title>
     <link rel="stylesheet" href="style.css">
     <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
+    <style>
+        /* Custom Styles for the Selection Flow */
+        .selection-btn {
+            flex: 1;
+            padding: 20px;
+            border: 2px solid #ddd;
+            background: white;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 16px;
+            font-weight: 600;
+            color: #555;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .selection-btn i { font-size: 30px; margin-bottom: 5px; }
+        
+        .selection-btn:hover { transform: translateY(-3px); box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
+
+        .selection-btn.active { border-color: #3C5B6F; background: #eef4f8; color: #3C5B6F; }
+        .selection-btn.active i { color: #3C5B6F; }
+
+        /* Step Containers */
+        #step-2-container { display: none; margin-top: 20px; animation: slideDown 0.4s ease; }
+        #urgent-container { display: none; margin-top: 15px; animation: fadeIn 0.4s ease; }
+
+        @keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    </style>
 </head>
 <body>
     <?php include 'sidebar.php'; ?>
     <section class="home-section" style="padding: 20px;">
-        <a href="reviewer_page.php" class="btn-back"><i class='bx bx-arrow-back'></i> Back</a>
+        <a href="reviewer_page.php" class="btn-back" style="margin-left: 20px;">
+            <i class='bx bx-arrow-back'></i> Back
+        </a>
         
         <h1>Reviewing: <?= htmlspecialchars($data['title']) ?></h1>
         
-        <button type="button" onclick="document.getElementById('reportModal').style.display='block'" 
-            style="background-color: #dc3545; color: white; padding: 8px 15px; border: none; border-radius: 5px; cursor: pointer; float: right; margin-top: -40px;">
-            <i class='bx bx-flag'></i> Report Misconduct
-        </button>
-        
-        <?php if($data['review_type'] == 'Appeal'): ?>
-            <div class="alert error" style="display:inline-block; padding: 5px 10px; margin-bottom: 20px; background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb;">
-                <i class='bx bx-error'></i> This is an <strong>Appeal Case</strong>. Rejection will be final.
-            </div>
-        <?php endif; ?>
-
         <div style="margin-bottom: 25px;">
             <iframe src="<?= $data['file_path'] ?>" style="width:100%; height:500px; border:1px solid #ccc;"></iframe>
         </div>
 
         <div class="form-box">
-            <h2 style="margin-top:0;">Submit Review</h2>
-            <form method="POST" enctype="multipart/form-data">
+            
+            <h3 style="margin-top: 0; margin-bottom: 15px;">Step 1: Select Decision</h3>
+            <div style="display: flex; gap: 15px; margin-bottom: 20px;">
                 
-                <div class="input-group">
-                    <label>Written Feedback (For Final Decision)</label>
-                    <textarea name="feedback" rows="5"></textarea>
-                </div>
+                <button type="button" class="selection-btn" onclick="selectAction('RECOMMEND', this)">
+                    <i class='bx bx-check-circle'></i>
+                    Recommend
+                </button>
 
-                <div class="input-group">
-                    <label>Annotated PDF (Optional)</label>
-                    <input type="file" name="annotated_pdf" accept=".pdf">
-                </div>
-                
-                <div style="margin-bottom: 20px; background: #fff3cd; padding: 10px; border-radius: 5px;">
-                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; color: #856404; font-weight: 600;">
-                        <input type="checkbox" name="priority" value="High" style="width: 20px; height: 20px;">
-                        <i class='bx bx-up-arrow-circle'></i> Mark as Urgent / Prioritize for HOD
-                    </label>
-                </div>
+                <button type="button" class="selection-btn" onclick="selectAction('AMENDMENT', this)">
+                    <i class='bx bx-edit'></i>
+                    Request Amendment
+                </button>
 
-                <div class="action-buttons-container">
+                <button type="button" class="selection-btn" onclick="selectAction('REJECT', this)">
+                    <i class='bx bx-x-circle'></i>
+                    Reject
+                </button>
+
+            </div>
+
+            <div id="step-2-container">
+                <form method="POST" enctype="multipart/form-data">
                     
-                    <div style="display: flex; gap: 10px;">
-                        <button type="submit" name="decision" value="RECOMMEND" class="btn-success btn-action">
-                            <i class='bx bx-check-circle'></i> Recommend
-                        </button>
+                    <input type="hidden" name="action_type" id="action_input">
 
-                        <button type="button" onclick="document.getElementById('amendmentModal').style.display='block'" class="btn-warning btn-action">
-                            <i class='bx bx-edit'></i> Request Amendment
-                        </button>
+                    <h3 style="margin-top: 0;">Step 2: Provide Feedback</h3>
+                    
+                    <div class="input-group">
+                        <label>Written Feedback / Comments</label>
+                        <textarea name="feedback" rows="5" required placeholder="Enter your feedback here..."></textarea>
                     </div>
 
-                    <div class="btn-reject-group">
-                        <button type="submit" name="decision" value="REJECT" class="btn-danger btn-action">
-                            <i class='bx bx-x-circle'></i> Reject
-                        </button>
+                    <div class="input-group">
+                        <label>Annotated PDF (Optional)</label>
+                        <input type="file" name="annotated_pdf" accept=".pdf">
                     </div>
                     
-                </div>
-                
-                <input type="hidden" name="submit_review" value="1">
-            </form>
+                    <div id="urgent-container" style="background: #fff3cd; padding: 10px; border-radius: 5px; border: 1px solid #ffeeba;">
+                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; color: #856404; font-weight: 600;">
+                            <input type="checkbox" name="priority" value="High" style="width: 20px; height: 20px;">
+                            <i class='bx bx-up-arrow-circle'></i> Mark as Urgent / Prioritize for HOD
+                        </label>
+                    </div>
+
+                    <div style="margin-top: 20px; text-align: right;">
+                        <button type="submit" class="btn-save" id="submit-btn" style="width: 100%;">Submit Review</button>
+                    </div>
+                </form>
+            </div>
+
         </div>
     </section>
 
-    <div id="reportModal" class="modal">
-      <div class="modal-content">
-        <span class="close-btn" onclick="document.getElementById('reportModal').style.display='none'">&times;</span>
-        <h3 style="color: #dc3545; margin-top: 0;">Report Misconduct</h3>
-        <p style="font-size: 14px; color: #666; margin-bottom: 20px;">
-            Reporting Researcher: <strong><?= htmlspecialchars($data['researcher_email']) ?></strong>
-        </p>
-        
-        <form action="submit_report.php" method="POST">
-            <input type="hidden" name="proposal_id" value="<?= $data['prop_id'] ?>">
-            <input type="hidden" name="researcher_email" value="<?= htmlspecialchars($data['researcher_email']) ?>">
-            <input type="hidden" name="proposal_title" value="<?= htmlspecialchars($data['title']) ?>">
-
-          <label style="display:block; margin-bottom: 5px; font-weight: bold;">Violation Category</label>
-          <select name="category" required style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 5px; margin-bottom: 15px;">
-            <option value="" disabled selected>-- Select Violation --</option>
-            <option value="Plagiarism">Plagiarism</option>
-            <option value="Data Fabrication">Data Fabrication</option>
-            <option value="Falsification">Falsification</option>
-            <option value="Other">Other</option>
-          </select>
-
-          <label style="display:block; margin-bottom: 5px; font-weight: bold;">Details / Evidence</label>
-          <textarea name="details" rows="5" required style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 5px; margin-bottom: 20px;"></textarea>
-
-          <div style="text-align: right;">
-              <button type="submit" name="submit_report" class="btn-danger btn-action">Submit Report</button>
-          </div>
-        </form>
-      </div>
-    </div>
-
-    <div id="amendmentModal" class="modal">
-        <div class="modal-content">
-            <span class="close-btn" onclick="document.getElementById('amendmentModal').style.display='none'">&times;</span>
-            <h3 style="color: #f39c12; margin-top: 0;">Request Amendment</h3>
-            <p style="font-size: 14px; color: #666; margin-bottom: 20px;">
-                Specify exactly what needs to be changed. The researcher will be notified to resubmit.
-            </p>
+    <script>
+        function selectAction(action, btnElement) {
+            // 1. Reset all buttons visually
+            document.querySelectorAll('.selection-btn').forEach(btn => btn.classList.remove('active'));
             
-            <form method="POST">
-                <textarea name="amendment_comments" rows="5" required placeholder="E.g., The budget methodology is unclear..." 
-                          style="width:100%; padding:10px; border:1px solid #ccc; border-radius:5px; margin-bottom:15px;"></textarea>
-                
-                <div style="text-align: right;">
-                    <button type="submit" name="request_amendment" class="btn-warning btn-action">
-                        Send Request
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
+            // 2. Highlight clicked button
+            btnElement.classList.add('active');
 
+            // 3. Set the hidden input value
+            document.getElementById('action_input').value = action;
+
+            // 4. Show the Form (Step 2)
+            document.getElementById('step-2-container').style.display = 'block';
+
+            // 5. Handle "Urgent" Checkbox visibility (Step 3)
+            const urgentDiv = document.getElementById('urgent-container');
+            const submitBtn = document.getElementById('submit-btn');
+
+            if (action === 'RECOMMEND') {
+                urgentDiv.style.display = 'block';
+                submitBtn.innerText = "Confirm Recommendation";
+                submitBtn.style.background = "#28a745"; // Green
+            } else if (action === 'AMENDMENT') {
+                urgentDiv.style.display = 'none';
+                submitBtn.innerText = "Send Amendment Request";
+                submitBtn.style.background = "#f39c12"; // Orange
+            } else if (action === 'REJECT') {
+                urgentDiv.style.display = 'none';
+                submitBtn.innerText = "Confirm Rejection";
+                submitBtn.style.background = "#dc3545"; // Red
+            }
+
+            // 6. Smooth Scroll to form
+            document.getElementById('step-2-container').scrollIntoView({ behavior: 'smooth' });
+        }
+    </script>
 </body>
 </html>

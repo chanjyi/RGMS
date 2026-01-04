@@ -12,7 +12,7 @@ if (!isset($_SESSION['email']) || $_SESSION['role'] != 'hod') {
 $query = "SELECT p.*, r.feedback 
           FROM proposals p 
           JOIN reviews r ON p.id = r.proposal_id 
-          WHERE p.status = 'RECOMMENDED' 
+          WHERE p.status = 'RECOMMEND' 
           ORDER BY p.priority DESC, p.created_at ASC";
 
 $result = $conn->query($query);
