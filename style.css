@@ -948,3 +948,99 @@ textarea {
 .action-buttons-container .btn-reject-group {
     margin-left: auto; 
 }
+
+/* ===========================
+   15. REVIEWER FLOW (Step-by-Step UI)
+   =========================== */
+
+/* Step 1: Action Selection Buttons */
+.selection-container {
+    display: flex;
+    gap: 20px;
+    margin-bottom: 25px;
+}
+
+.selection-btn {
+    flex: 1;
+    padding: 25px 15px;
+    border: 2px solid #ddd;
+    background: white;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 16px;
+    font-weight: 600;
+    color: #555;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+}
+
+.selection-btn i {
+    font-size: 32px;
+    margin-bottom: 5px;
+    color: #888;
+    transition: color 0.3s ease;
+}
+
+/* Hover Effects */
+.selection-btn:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 15px rgba(0,0,0,0.1);
+    border-color: #3C5B6F;
+}
+
+.selection-btn:hover i {
+    color: #3C5B6F;
+}
+
+/* Active (Selected) State */
+.selection-btn.active {
+    border-color: #3C5B6F;
+    background: #eef4f8; /* Light Blue Tint */
+    color: #3C5B6F;
+    box-shadow: inset 0 0 0 1px #3C5B6F;
+}
+
+.selection-btn.active i {
+    color: #3C5B6F;
+}
+
+/* Step 2 & 3: Hidden Containers */
+#step-2-container {
+    display: none; /* Hidden by default */
+    margin-top: 25px;
+    padding-top: 25px;
+    border-top: 1px dashed #ccc;
+    animation: slideDown 0.5s ease forwards;
+}
+
+#urgent-container {
+    display: none; /* Hidden by default */
+    margin-top: 20px;
+    background: #fff3cd;
+    padding: 15px;
+    border-radius: 8px;
+    border: 1px solid #ffeeba;
+    animation: fadeIn 0.5s ease forwards;
+}
+
+/* Animations */
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}

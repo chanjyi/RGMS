@@ -42,17 +42,30 @@ $stmt->bind_param("i", $user_id);
 $stmt->execute();
 $result = $stmt->get_result();
 
-// 3. FETCH HISTORY LIST (Recommended, Rejected, Reported)
-$hist_query = "SELECT r.decision, r.feedback, r.status as review_status, r.review_date,
+// 3a. FETCH COMPLETED REVIEWS (Normal History)
+$hist_query = "SELECT r.decision, r.feedback, r.status as review_status, r.review_date, r.annotated_file,
                       p.title, p.researcher_email, p.status as final_status, p.file_path
                FROM reviews r 
                JOIN proposals p ON r.proposal_id = p.id 
-               WHERE r.reviewer_id = ? AND r.status != 'Pending'
+               WHERE r.reviewer_id = ? AND r.status = 'Completed'
                ORDER BY r.review_date DESC"; 
 $hist_stmt = $conn->prepare($hist_query);
 $hist_stmt->bind_param("i", $user_id);
 $hist_stmt->execute();
 $history = $hist_stmt->get_result();
+
+// 3b. FETCH REPORTED CASES (Misconduct Table)
+$rep_query = "SELECT m.created_at as review_date, p.title, p.researcher_email, m.category, m.details
+              FROM misconduct_reports m 
+              JOIN proposals p ON m.proposal_id = p.id 
+              WHERE m.reviewer_email = ? 
+              ORDER BY m.created_at DESC";
+
+$rep_stmt = $conn->prepare($rep_query);
+// Note: misconduct_reports uses email, so we bind "s" (string) and use $email instead of $user_id
+$rep_stmt->bind_param("s", $email); 
+$rep_stmt->execute();
+$reports = $rep_stmt->get_result();
 ?>
 
 <!DOCTYPE html>
@@ -196,9 +209,9 @@ $history = $hist_stmt->get_result();
 
                                 <td>
                                     <?php if($row['review_status'] == 'Reported'): ?>
-                                        <span class="status-badge rejected" style="background:#000; color:#fff;">
-                                            <i class='bx bxs-flag-alt'></i> Reported
-                                        </span>
+                                        <span class="status-badge rejected" style="background:#000; color:#fff;">Reported</span>
+                                    <?php elseif($row['decision'] == 'AMENDMENT'): ?>
+                                        <span class="status-badge requires_amendment">REQUESTED AMENDMENT</span>
                                     <?php else: ?>
                                         <span class="status-badge <?= $row['decision'] == 'RECOMMEND' ? 'approved' : 'rejected' ?>">
                                             <?= $row['decision'] ?>
@@ -207,21 +220,43 @@ $history = $hist_stmt->get_result();
                                 </td>
 
                                 <td>
-                                    <?php if($row['review_status'] == 'Reported'): ?>
+                                    <?php 
+                                    // 1. If Reported -> "Under Investigation"
+                                    if($row['review_status'] == 'Reported'): ?>
                                         <span style="color: #888;">Under Investigation</span>
-                                    <?php else: ?>
-                                        <span class="status-badge <?= strtolower($row['final_status']) ?>">
+                                    
+                                    <?php 
+                                    // 2. If Reviewer Rejected OR Requested Amendment -> SHOW NOTHING
+                                    // (Added the check for 'REJECT' here)
+                                    elseif($row['decision'] == 'AMENDMENT' || $row['decision'] == 'REJECT'): ?>
+                                        <span></span> 
+
+                                    <?php 
+                                    // 3. If Pending HOD -> "Pending"
+                                    elseif ($row['final_status'] == 'RECOMMEND'): ?>
+                                        <span class="status-badge assigned">Pending</span>
+
+                                    <?php 
+                                    // 4. Otherwise -> Approved/Rejected (HOD Decision)
+                                    else: ?>
+                                        <?php $badge_class = strtolower($row['final_status']); ?>
+                                        <span class="status-badge <?= $badge_class ?>">
                                             <?= str_replace('_', ' ', $row['final_status']) ?>
                                         </span>
                                     <?php endif; ?>
                                 </td>
 
-                                <td style="max-width: 300px;">
-                                    <?php if($row['review_status'] == 'Reported'): ?>
-                                        <em style="color:#666;">(Confidential Report Submitted)</em>
-                                    <?php else: ?>
-                                        <div style="background: #f9f9f9; padding: 10px; border-radius: 5px; border: 1px solid #eee; font-size: 13px; max-height: 80px; overflow-y: auto;">
-                                            <?= nl2br(htmlspecialchars($row['feedback'])) ?>
+                                <td>
+                                    <div style="background: #f9f9f9; padding: 10px; border-radius: 5px; border: 1px solid #eee; font-size: 13px; max-height: 80px; overflow-y: auto;">
+                                        <?= nl2br(htmlspecialchars($row['feedback'])) ?>
+                                    </div>
+
+                                    <?php if (!empty($row['annotated_file'])): ?>
+                                        <div style="margin-top: 8px;">
+                                            <a href="<?= htmlspecialchars($row['annotated_file']) ?>" target="_blank" 
+                                            style="font-size: 11px; color: #3C5B6F; text-decoration: none; font-weight: 600; display: inline-flex; align-items: center; gap: 3px;">
+                                            <i class='bx bx-paperclip'></i> View Annotated PDF
+                                            </a>
                                         </div>
                                     <?php endif; ?>
                                 </td>
@@ -233,6 +268,44 @@ $history = $hist_stmt->get_result();
                         <?php endwhile; ?>
                     <?php else: ?>
                         <tr><td colspan="5" style="text-align: center; color: #777;">No history yet.</td></tr>
+                    <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
+
+        <h2 style="color: #dc3545; margin-top: 40px;">Reported Misconduct Cases</h2>
+        <div style="overflow-x:auto; margin-bottom: 40px;">
+            <table class="styled-table" style="border-top: 5px solid #dc3545;">
+                <thead>
+                    <tr style="background: #dc3545; color: white;">
+                        <th>Proposal</th>
+                        <th>Researcher</th>
+                        <th>Violation Category</th>
+                        <th>Report Details</th>
+                        <th>Date Reported</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php if ($reports->num_rows > 0): ?>
+                        <?php while($row = $reports->fetch_assoc()): ?>
+                            <tr>
+                                <td><strong><?= htmlspecialchars($row['title']) ?></strong></td>
+                                <td><?= htmlspecialchars($row['researcher_email']) ?></td>
+                                <td>
+                                    <span class="status-badge rejected" style="background:#000; color:#fff;">
+                                        <?= htmlspecialchars($row['category']) ?>
+                                    </span>
+                                </td>
+                                <td><?= nl2br(htmlspecialchars($row['details'])) ?></td>
+                                <td><?= date('M d, Y', strtotime($row['review_date'])) ?></td>
+                            </tr>
+                        <?php endwhile; ?>
+                    <?php else: ?>
+                        <tr>
+                            <td colspan="5" style="text-align: center; color: #666; font-style: italic;">
+                                No reported misconduct cases.
+                            </td>
+                        </tr>
                     <?php endif; ?>
                 </tbody>
             </table>

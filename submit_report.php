@@ -8,29 +8,49 @@ if (isset($_POST['submit_report'])) {
         die("Error: You are not logged in.");
     }
     
-    $reviewer_email = $_SESSION['email']; 
+$reviewer_email = $_SESSION['email']; 
     $researcher_email = $_POST['researcher_email'];
     $category = $_POST['category'];
     $details = $_POST['details'];
-    $proposal_id = $_POST['proposal_id']; // <--- New Variable
+    $proposal_id = $_POST['proposal_id'];
 
     // 1. Insert into misconduct_reports
-    $stmt = $conn->prepare("INSERT INTO misconduct_reports (reviewer_email, researcher_email, category, details) VALUES (?, ?, ?, ?)");
-    $stmt->bind_param("ssss", $reviewer_email, $researcher_email, $category, $details);
+    $stmt = $conn->prepare("INSERT INTO misconduct_reports (proposal_id, reviewer_email, researcher_email, category, details) VALUES (?, ?, ?, ?, ?)");
+    $stmt->bind_param("issss", $proposal_id, $reviewer_email, $researcher_email, $category, $details);
     
     if ($stmt->execute()) {
         
-        // 2. NEW STEP: Mark the Review as "Reported" (So it vanishes from Dashboard)
-        // First, get reviewer's ID
+        // 2. GET REVIEWER ID (Add trim to be safe)
+        $reviewer_email = $conn->real_escape_string($_SESSION['email']); // Sanitize
         $u_q = $conn->query("SELECT id FROM users WHERE email = '$reviewer_email'");
-        $reviewer_id = $u_q->fetch_assoc()['id'];
+        
+        if ($u_q->num_rows > 0) {
+            $reviewer_id = $u_q->fetch_assoc()['id'];
 
-        // Update the review status
-        $update_rev = $conn->prepare("UPDATE reviews SET status = 'Reported' WHERE proposal_id = ? AND reviewer_id = ?");
+            // 3. UPDATE REVIEW TABLE
+            $update_rev = $conn->prepare("UPDATE reviews SET status = 'Reported', decision = 'REJECT', review_date = NOW() WHERE proposal_id = ? AND reviewer_id = ?");
+            $update_rev->bind_param("ii", $proposal_id, $reviewer_id);
+            
+            if (!$update_rev->execute()) {
+                die("Error updating review status: " . $conn->error); // Debugging line
+            }
+        } else {
+            die("Error: Reviewer account not found.");
+        }
+
+        // 3. UPDATE REVIEW TABLE (Fixes Date & Decision)
+        // We set review_date = NOW() to fix the 1970 bug
+        $update_rev = $conn->prepare("UPDATE reviews SET status = 'Reported', decision = 'REJECT', review_date = NOW() WHERE proposal_id = ? AND reviewer_id = ?");
         $update_rev->bind_param("ii", $proposal_id, $reviewer_id);
         $update_rev->execute();
 
-        // 3. Send Notification to Admin
+        // 4. UPDATE PROPOSAL STATUS (Fixes HOD Status)
+        // We set status = 'UNDER_INVESTIGATION' so it goes to Admin, not HOD
+        $update_prop = $conn->prepare("UPDATE proposals SET status = 'UNDER_INVESTIGATION' WHERE id = ?");
+        $update_prop->bind_param("i", $proposal_id);
+        $update_prop->execute();
+
+        // 5. NOTIFY ADMIN
         $admin_query = $conn->query("SELECT email FROM users WHERE role = 'admin' LIMIT 1");
         if ($admin_query->num_rows > 0) {
             $admin_email = $admin_query->fetch_assoc()['email'];
@@ -41,7 +61,7 @@ if (isset($_POST['submit_report'])) {
             $notif_stmt->execute();
         }
 
-        echo "<script>alert('Report submitted. This proposal has been removed from your pending list.'); window.location.href='reviewer_page.php';</script>";
+        echo "<script>alert('Report submitted. This case has been escalated to Admin.'); window.location.href='reviewer_page.php';</script>";
     } else {
         echo "Error: " . $conn->error;
     }
