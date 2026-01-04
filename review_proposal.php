@@ -34,6 +34,15 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action_type'])) {
     $action  = $_POST['action_type']; // Values: RECOMMEND, REJECT, AMENDMENT
     $feedback = $_POST['feedback'];
     $prop_id = $data['prop_id'];
+
+    // --- 1. HANDLE FILE UPLOAD (Moved here so it works for ALL actions) ---
+    $annotated_path = NULL;
+    if (!empty($_FILES['annotated_pdf']['name'])) {
+        $target_dir = "uploads/reviews/";
+        if (!is_dir($target_dir)) mkdir($target_dir, 0777, true);
+        $annotated_path = $target_dir . "rev_" . time() . "_" . basename($_FILES['annotated_pdf']['name']);
+        move_uploaded_file($_FILES['annotated_pdf']['tmp_name'], $annotated_path);
+    }
     
     // --- CASE A: AMENDMENT REQUEST ---
     if ($action == 'AMENDMENT') {
@@ -42,8 +51,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action_type'])) {
         $upd_prop->bind_param("si", $feedback, $prop_id);
 
         // Update Review (Mark Completed)
-        $upd_rev = $conn->prepare("UPDATE reviews SET status = 'Completed', decision = 'AMENDMENT', feedback = ?, review_date = NOW() WHERE id = ?");
-        $upd_rev->bind_param("si", $feedback, $review_id);
+        // FIX: Added annotated_file to the query
+        $upd_rev = $conn->prepare("UPDATE reviews SET status = 'Completed', decision = 'AMENDMENT', feedback = ?, annotated_file = ?, review_date = NOW() WHERE id = ?");
+        $upd_rev->bind_param("ssi", $feedback, $annotated_path, $review_id);
 
         if ($upd_prop->execute() && $upd_rev->execute()) {
             // Notify
@@ -60,16 +70,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action_type'])) {
     // --- CASE B: RECOMMEND OR REJECT ---
     else {
         $priority = (isset($_POST['priority']) && $action == 'RECOMMEND') ? 'High' : 'Normal';
-        $annotated_path = NULL;
         
-        // Handle File Upload
-        if (!empty($_FILES['annotated_pdf']['name'])) {
-            $target_dir = "uploads/reviews/";
-            if (!is_dir($target_dir)) mkdir($target_dir, 0777, true);
-            $annotated_path = $target_dir . "rev_" . time() . "_" . basename($_FILES['annotated_pdf']['name']);
-            move_uploaded_file($_FILES['annotated_pdf']['tmp_name'], $annotated_path);
-        }
-
         // Update Reviews Table
         $upd_rev = $conn->prepare("UPDATE reviews SET feedback = ?, annotated_file = ?, decision = ?, status = 'Completed', review_date = NOW() WHERE id = ?");
         $upd_rev->bind_param("sssi", $feedback, $annotated_path, $action, $review_id);
@@ -112,39 +113,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action_type'])) {
     <title>Review Proposal</title>
     <link rel="stylesheet" href="style.css">
     <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
-    <style>
-        /* Custom Styles for the Selection Flow */
-        .selection-btn {
-            flex: 1;
-            padding: 20px;
-            border: 2px solid #ddd;
-            background: white;
-            border-radius: 10px;
-            cursor: pointer;
-            transition: all 0.3s;
-            font-size: 16px;
-            font-weight: 600;
-            color: #555;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .selection-btn i { font-size: 30px; margin-bottom: 5px; }
-        
-        .selection-btn:hover { transform: translateY(-3px); box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
-
-        .selection-btn.active { border-color: #3C5B6F; background: #eef4f8; color: #3C5B6F; }
-        .selection-btn.active i { color: #3C5B6F; }
-
-        /* Step Containers */
-        #step-2-container { display: none; margin-top: 20px; animation: slideDown 0.4s ease; }
-        #urgent-container { display: none; margin-top: 15px; animation: fadeIn 0.4s ease; }
-
-        @keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-    </style>
 </head>
 <body>
     <?php include 'sidebar.php'; ?>
@@ -155,6 +123,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action_type'])) {
         
         <h1>Reviewing: <?= htmlspecialchars($data['title']) ?></h1>
         
+        <button type="button" onclick="document.getElementById('reportModal').style.display='block'" 
+            style="background-color: #dc3545; color: white; padding: 8px 15px; border: none; border-radius: 5px; cursor: pointer; float: right; margin-top: -45px;">
+            <i class='bx bx-flag'></i> Report Misconduct
+        </button>
+        
         <div style="margin-bottom: 25px;">
             <iframe src="<?= $data['file_path'] ?>" style="width:100%; height:500px; border:1px solid #ccc;"></iframe>
         </div>
@@ -162,7 +135,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action_type'])) {
         <div class="form-box">
             
             <h3 style="margin-top: 0; margin-bottom: 15px;">Step 1: Select Decision</h3>
-            <div style="display: flex; gap: 15px; margin-bottom: 20px;">
+            <div class="selection-container">
                 
                 <button type="button" class="selection-btn" onclick="selectAction('RECOMMEND', this)">
                     <i class='bx bx-check-circle'></i>
@@ -198,7 +171,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action_type'])) {
                         <input type="file" name="annotated_pdf" accept=".pdf">
                     </div>
                     
-                    <div id="urgent-container" style="background: #fff3cd; padding: 10px; border-radius: 5px; border: 1px solid #ffeeba;">
+                    <div id="urgent-container">
                         <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; color: #856404; font-weight: 600;">
                             <input type="checkbox" name="priority" value="High" style="width: 20px; height: 20px;">
                             <i class='bx bx-up-arrow-circle'></i> Mark as Urgent / Prioritize for HOD
@@ -214,39 +187,63 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action_type'])) {
         </div>
     </section>
 
+    <div id="reportModal" class="modal">
+      <div class="modal-content">
+        <span class="close-btn" onclick="document.getElementById('reportModal').style.display='none'">&times;</span>
+        
+        <h3 style="color: #dc3545; margin-top: 0;">Report Misconduct</h3>
+        <p style="font-size: 14px; color: #666; margin-bottom: 20px;">
+            Reporting Researcher: <strong><?= htmlspecialchars($data['researcher_email']) ?></strong>
+        </p>
+        
+        <form action="submit_report.php" method="POST">
+            <input type="hidden" name="proposal_id" value="<?= $data['prop_id'] ?>">
+            <input type="hidden" name="researcher_email" value="<?= htmlspecialchars($data['researcher_email']) ?>">
+            <input type="hidden" name="proposal_title" value="<?= htmlspecialchars($data['title']) ?>">
+
+          <label style="display:block; margin-bottom: 5px; font-weight: bold;">Violation Category</label>
+          <select name="category" required style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 5px; margin-bottom: 15px;">
+            <option value="" disabled selected>-- Select Violation --</option>
+            <option value="Plagiarism">Plagiarism</option>
+            <option value="Data Fabrication">Data Fabrication</option>
+            <option value="Falsification">Falsification</option>
+            <option value="Other">Other</option>
+          </select>
+
+          <label style="display:block; margin-bottom: 5px; font-weight: bold;">Details / Evidence</label>
+          <textarea name="details" rows="5" required style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 5px; margin-bottom: 20px;"></textarea>
+
+          <div style="text-align: right;">
+              <button type="button" onclick="document.getElementById('reportModal').style.display='none'" style="padding: 10px 20px; background: #ccc; border: none; border-radius: 5px; cursor: pointer; margin-right: 10px;">Cancel</button>
+              <button type="submit" name="submit_report" class="btn-danger btn-action">Submit Report</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <script>
         function selectAction(action, btnElement) {
-            // 1. Reset all buttons visually
             document.querySelectorAll('.selection-btn').forEach(btn => btn.classList.remove('active'));
-            
-            // 2. Highlight clicked button
             btnElement.classList.add('active');
-
-            // 3. Set the hidden input value
             document.getElementById('action_input').value = action;
-
-            // 4. Show the Form (Step 2)
             document.getElementById('step-2-container').style.display = 'block';
 
-            // 5. Handle "Urgent" Checkbox visibility (Step 3)
             const urgentDiv = document.getElementById('urgent-container');
             const submitBtn = document.getElementById('submit-btn');
 
             if (action === 'RECOMMEND') {
                 urgentDiv.style.display = 'block';
                 submitBtn.innerText = "Confirm Recommendation";
-                submitBtn.style.background = "#28a745"; // Green
+                submitBtn.style.background = "#28a745"; 
             } else if (action === 'AMENDMENT') {
                 urgentDiv.style.display = 'none';
                 submitBtn.innerText = "Send Amendment Request";
-                submitBtn.style.background = "#f39c12"; // Orange
+                submitBtn.style.background = "#f39c12"; 
             } else if (action === 'REJECT') {
                 urgentDiv.style.display = 'none';
                 submitBtn.innerText = "Confirm Rejection";
-                submitBtn.style.background = "#dc3545"; // Red
+                submitBtn.style.background = "#dc3545"; 
             }
-
-            // 6. Smooth Scroll to form
             document.getElementById('step-2-container').scrollIntoView({ behavior: 'smooth' });
         }
     </script>
