@@ -33,7 +33,7 @@ $hod_rej_stmt->execute();
 $hod_rejected = $hod_rej_stmt->get_result()->fetch_assoc()['count'];
 
 // 2. FETCH PENDING LIST
-$query = "SELECT r.id as review_id, p.title, p.file_path, p.researcher_email, r.status, r.type 
+$query = "SELECT r.id as review_id, p.title, p.file_path, p.researcher_email, r.status, r.type, p.status as proposal_status 
           FROM reviews r 
           JOIN proposals p ON r.proposal_id = p.id 
           WHERE r.reviewer_id = ? AND r.status = 'Pending'";
@@ -161,10 +161,12 @@ $reports = $rep_stmt->get_result();
         <div class="card-container" style="margin-bottom: 50px;">
             <?php if ($result->num_rows > 0): ?>
                 <?php while($row = $result->fetch_assoc()): 
-                    $is_appeal = (isset($row['type']) && $row['type'] == 'Appeal');
+                    // FIX: Strict check. Only show red if DB Type is Appeal OR Status is in appeal mode.
+                    $is_appeal = ($row['type'] == 'Appeal') || ($row['proposal_status'] == 'APPEALED');
+                    
                     $card_style = $is_appeal ? "border-left: 5px solid #dc3545; background: #fff5f5;" : "border-left: 5px solid #3C5B6F;";
                     $badge = $is_appeal ? "<span style='color:white; background:#dc3545; padding:2px 6px; font-size:11px; border-radius:4px; margin-left:10px;'>APPEAL CASE</span>" : "";
-                ?>
+                ?>   
                     <div class="card" style="width: 300px; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); background: white; <?= $card_style ?>">
                         <div style="display:flex; justify-content:space-between; align-items:start; margin-bottom: 5px;">
                             <h3 style="color: #3C5B6F; font-size: 18px; margin: 0;"><?= htmlspecialchars($row['title']) ?></h3>
