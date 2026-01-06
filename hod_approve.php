@@ -21,23 +21,61 @@ $stmt->bind_param("i", $prop_id);
 $stmt->execute();
 $data = $stmt->get_result()->fetch_assoc();
 
-// HANDLE APPROVAL / REJECTION
+// HANDLE HOD ACTIONS
 if (isset($_POST['final_decision'])) {
-    $decision = $_POST['final_decision']; // 'APPROVED' or 'REJECTED'
+    $decision = $_POST['final_decision']; // Values: APPROVED, REJECTED, or GRANT_APPEAL
     
-    // 1. Update Proposal Status
-    $upd = $conn->prepare("UPDATE proposals SET status = ? WHERE id = ?");
-    $upd->bind_param("si", $decision, $prop_id);
-    
-    if ($upd->execute()) {
-        // 2. Notify Researcher
-        $msg = "Final Decision: Your proposal '{$data['title']}' has been $decision by the Head of Department.";
-        $notif = $conn->prepare("INSERT INTO notifications (user_email, message) VALUES (?, ?)");
-        $notif->bind_param("ss", $data['researcher_email'], $msg);
-        $notif->execute();
+    // CASE 1: HOD Grants the Appeal (Sends to Admin for Reassignment)
+    if ($decision == 'GRANT_APPEAL') {
+        // Update status so Admin can see it in "Pending Reassignment" list
+        $stmt = $conn->prepare("UPDATE proposals SET status = 'PENDING_REASSIGNMENT' WHERE id = ?");
+        $stmt->bind_param("i", $prop_id);
+        
+        if ($stmt->execute()) {
+            // Notify Researcher
+            $msg = "Appeal Update: The HOD has accepted your appeal. Your proposal will be reassigned to a new reviewer.";
+            $conn->query("INSERT INTO notifications (user_email, message) VALUES ('{$data['researcher_email']}', '$msg')");
+            
+            header("Location: hod_page.php");
+            exit();
+        }
+    }
+    // CASE 2: Normal Approve/Reject
+    else {
+        // Update Proposal Status
+        $upd = $conn->prepare("UPDATE proposals SET status = ? WHERE id = ?");
+        $upd->bind_param("si", $decision, $prop_id);
+        
+        if ($upd->execute()) {
+            // A. Notify Researcher
+            $msg = "Final Decision: Your proposal '{$data['title']}' has been $decision by the Head of Department.";
+            $conn->query("INSERT INTO notifications (user_email, message) VALUES ('{$data['researcher_email']}', '$msg')");
 
-        header("Location: hod_page.php");
-        exit();
+            // B. Notify Reviewer (Respecting Settings)
+            $rev_stmt = $conn->prepare("SELECT u.email, u.notify_hod_approve, u.notify_hod_reject FROM reviews r JOIN users u ON r.reviewer_id = u.id WHERE r.proposal_id = ?");
+            $rev_stmt->bind_param("i", $prop_id);
+            $rev_stmt->execute();
+            $reviewer = $rev_stmt->get_result()->fetch_assoc();
+
+            if ($reviewer) {
+                $rev_msg = "";
+                // Check if HOD Approved AND Reviewer wants to know
+                if ($decision == 'APPROVED' && $reviewer['notify_hod_approve'] == 1) {
+                    $rev_msg = "Great news! The HOD has APPROVED the proposal you reviewed.";
+                } 
+                // Check if HOD Rejected AND Reviewer wants to know
+                elseif ($decision == 'REJECTED' && $reviewer['notify_hod_reject'] == 1) {
+                    $rev_msg = "Update: The HOD has REJECTED the proposal you reviewed.";
+                }
+
+                if (!empty($rev_msg)) {
+                    $conn->query("INSERT INTO notifications (user_email, message) VALUES ('{$reviewer['email']}', '$rev_msg')");
+                }
+            }
+
+            header("Location: hod_page.php");
+            exit();
+        }
     }
 }
 ?>
@@ -80,14 +118,30 @@ if (isset($_POST['final_decision'])) {
                 
                 <form method="POST">
                     <label style="display:block; margin-bottom:10px; font-weight:bold;">HOD Action:</label>
-                    <button type="submit" name="final_decision" value="APPROVED" 
-                        style="width:100%; padding:10px; background:#28a745; color:white; border:none; margin-bottom:10px; cursor:pointer;">
-                        Final Approve
-                    </button>
-                    <button type="submit" name="final_decision" value="REJECTED" 
-                        style="width:100%; padding:10px; background:#dc3545; color:white; border:none; cursor:pointer;">
-                        Reject
-                    </button>
+
+                    <?php if ($data['status'] == 'APPEALED'): ?>
+                        <p style="color: #d9534f; font-size: 14px; margin-bottom: 10px;">
+                            <i class='bx bx-error-circle'></i> This is an Appeal Case.
+                        </p>
+                        <button type="submit" name="final_decision" value="GRANT_APPEAL" 
+                            style="width:100%; padding:10px; background:#f39c12; color:white; border:none; margin-bottom:10px; cursor:pointer;">
+                            Accept Appeal (Send to Admin)
+                        </button>
+                        <button type="submit" name="final_decision" value="REJECTED" 
+                            style="width:100%; padding:10px; background:#dc3545; color:white; border:none; cursor:pointer;">
+                            Dismiss Appeal (Final Reject)
+                        </button>
+
+                    <?php else: ?>
+                        <button type="submit" name="final_decision" value="APPROVED" 
+                            style="width:100%; padding:10px; background:#28a745; color:white; border:none; margin-bottom:10px; cursor:pointer;">
+                            Final Approve
+                        </button>
+                        <button type="submit" name="final_decision" value="REJECTED" 
+                            style="width:100%; padding:10px; background:#dc3545; color:white; border:none; cursor:pointer;">
+                            Reject
+                        </button>
+                    <?php endif; ?>
                 </form>
             </div>
         </div>

@@ -36,32 +36,54 @@ if (isset($_POST['assign_proposal'])) {
 }
 
 // ==========================================
-// 3. LOGIC: ASSIGN APPEAL CASE
+// 3. LOGIC: ASSIGN APPEAL CASE (ROBUST FIX)
 // ==========================================
 if (isset($_POST['assign_appeal'])) {
     $prop_id = $_POST['proposal_id'];
     $reviewer_id = $_POST['reviewer_id'];
 
-    // Insert Review Record (Type = Appeal)
-    $stmt = $conn->prepare("INSERT INTO reviews (proposal_id, reviewer_id, status, assigned_date, type) VALUES (?, ?, 'Pending', NOW(), 'Appeal')");
-    $stmt->bind_param("ii", $prop_id, $reviewer_id);
+    // 1. VALIDATION: Check History using store_result() (Compatible with all PHP versions)
+    $check_hist = $conn->prepare("SELECT id FROM reviews WHERE proposal_id = ? AND reviewer_id = ?");
+    $check_hist->bind_param("ii", $prop_id, $reviewer_id);
     
-    if ($stmt->execute()) {
-        // Update Proposal (Set Priority High)
-        $conn->query("UPDATE proposals SET status = 'ASSIGNED', priority = 'High' WHERE id = $prop_id");
-
-        // Notify Reviewer (RED notification text)
-        $rev_q = $conn->query("SELECT email FROM users WHERE id = $reviewer_id");
-        $rev_email = $rev_q->fetch_assoc()['email'];
-        $msg = "Appeal Case: You have been assigned to review proposal #$prop_id.";
-        
-        $notif = $conn->prepare("INSERT INTO notifications (user_email, message) VALUES (?, ?)");
-        $notif->bind_param("ss", $rev_email, $msg);
-        $notif->execute();
-
-        $message = "Appeal assigned successfully.";
+    if (!$check_hist->execute()) {
+        // Debugging: Show SQL error if query fails
+        $message = "Database Error (Check): " . $check_hist->error;
     } else {
-        $message = "Error assigning appeal.";
+        $check_hist->store_result(); // Store result to check num_rows safely
+
+        if ($check_hist->num_rows > 0) {
+            // 2. BLOCK ASSIGNMENT: History found
+            $message = "Error: This reviewer has already reviewed this proposal. Please choose someone else.";
+            $msg_type = "error";
+        } else {
+            // 3. ALLOW ASSIGNMENT: No history found
+            $check_hist->close(); // Close previous statement
+
+            $stmt = $conn->prepare("INSERT INTO reviews (proposal_id, reviewer_id, status, assigned_date, type) VALUES (?, ?, 'Pending', NOW(), 'Appeal')");
+            $stmt->bind_param("ii", $prop_id, $reviewer_id);
+            
+            if ($stmt->execute()) {
+                // Update Proposal Status & Priority
+                $conn->query("UPDATE proposals SET status = 'ASSIGNED', priority = 'High' WHERE id = $prop_id");
+
+                // Notify Reviewer
+                $rev_q = $conn->query("SELECT email FROM users WHERE id = $reviewer_id");
+                if ($rev_q && $rev_q->num_rows > 0) {
+                    $rev_email = $rev_q->fetch_assoc()['email'];
+                    $msg = "Appeal Case: You have been assigned to review proposal #$prop_id.";
+                    $notif = $conn->prepare("INSERT INTO notifications (user_email, message) VALUES (?, ?)");
+                    $notif->bind_param("ss", $rev_email, $msg);
+                    $notif->execute();
+                }
+
+                $message = "Appeal assigned successfully!";
+                $msg_type = "success"; //
+            } else {
+                $message = "Database Error (Assign): " . $stmt->error;
+                $msg_type = "error"; //
+            }
+        }
     }
 }
 
@@ -70,7 +92,7 @@ if (isset($_POST['assign_appeal'])) {
 // ==========================================
 $reviewers = $conn->query("SELECT * FROM users WHERE role = 'Reviewer' ORDER BY name ASC");
 $new_proposals = $conn->query("SELECT * FROM proposals WHERE status = 'SUBMITTED'");
-$appeals = $conn->query("SELECT * FROM proposals WHERE status = 'APPEALED'");
+$appeals = $conn->query("SELECT * FROM proposals WHERE status = 'PENDING_REASSIGNMENT'");
 ?>
 
 <!DOCTYPE html>
@@ -91,7 +113,16 @@ $appeals = $conn->query("SELECT * FROM proposals WHERE status = 'APPEALED'");
         <hr style="opacity: 0.3; margin: 20px 0;">
 
         <?php if ($message): ?>
-            <div class="alert" style="background: #d4edda; color: #155724; padding: 15px; margin-bottom: 20px; border-radius: 5px;">
+            <?php 
+                // Determine colors based on type
+                // If it's an error: RED background (#f8d7da), RED text (#721c24)
+                // If it's success: GREEN background (#d4edda), GREEN text (#155724)
+                $bg_color = (isset($msg_type) && $msg_type == 'error') ? '#f8d7da' : '#d4edda';
+                $text_color = (isset($msg_type) && $msg_type == 'error') ? '#721c24' : '#155724';
+                $border_color = (isset($msg_type) && $msg_type == 'error') ? '#f5c6cb' : '#c3e6cb';
+            ?>
+            
+            <div class="alert" style="background: <?= $bg_color ?>; color: <?= $text_color ?>; border: 1px solid <?= $border_color ?>; padding: 15px; margin-bottom: 20px; border-radius: 5px;">
                 <?= $message ?>
             </div>
         <?php endif; ?>
