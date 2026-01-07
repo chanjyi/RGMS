@@ -9,22 +9,24 @@ if (!isset($_SESSION['email']) || $_SESSION['role'] != 'researcher') {
 }
 
 $message = "";
-$messageType = ""; // success, error
+$messageType = ""; 
 $email = $_SESSION['email'];
 
-// Helper for Notifications
-function notifyAdmin($conn, $msg) {
-    $admin_q = $conn->query("SELECT email FROM users WHERE role = 'admin' LIMIT 1");
-    if ($admin_q->num_rows > 0) {
-        $admin_email = $admin_q->fetch_assoc()['email'];
-        $stmt = $conn->prepare("INSERT INTO notifications (user_email, message, type) VALUES (?, ?, 'info')");
-        $stmt->bind_param("ss", $admin_email, $msg);
+// Helper: Notify Admin/HOD
+function notifySystem($conn, $role, $msg) {
+    $q = $conn->prepare("SELECT email FROM users WHERE role = ?");
+    $q->bind_param("s", $role);
+    $q->execute();
+    $result = $q->get_result();
+    while ($row = $result->fetch_assoc()) {
+        $stmt = $conn->prepare("INSERT INTO notifications (user_email, message, type) VALUES (?, ?, 'alert')");
+        $stmt->bind_param("ss", $row['email'], $msg);
         $stmt->execute();
     }
 }
 
 // =========================================================
-// 1. USE CASE 7: SUBMIT & TRACK PROPOSALS
+// 1. USE CASE 7: SUBMIT PROPOSAL
 // =========================================================
 if (isset($_POST['submit_proposal'])) {
     $title = mysqli_real_escape_string($conn, $_POST['title']);
@@ -38,13 +40,13 @@ if (isset($_POST['submit_proposal'])) {
     $target_file = $target_dir . $new_file_name;
 
     if ($file_type != "pdf") {
-        $message = "Error: Only PDF files are allowed."; $messageType = "error";
+        $message = "Error: Only PDF allowed."; $messageType = "error";
     } else {
         if (move_uploaded_file($_FILES["proposal_file"]["tmp_name"], $target_file)) {
             $stmt = $conn->prepare("INSERT INTO proposals (title, researcher_email, file_path, status) VALUES (?, ?, ?, 'SUBMITTED')");
             $stmt->bind_param("sss", $title, $email, $target_file);
             if ($stmt->execute()) {
-                notifyAdmin($conn, "New Proposal Submitted: '$title' by $email");
+                notifySystem($conn, 'admin', "New Proposal Submitted: '$title' by $email");
                 $message = "Proposal submitted successfully!"; $messageType = "success";
             } else {
                 $message = "DB Error: " . $conn->error; $messageType = "error";
@@ -69,29 +71,38 @@ if (isset($_POST['amend_proposal'])) {
         $message = "Error: PDF only."; $messageType = "error";
     } else {
         if (move_uploaded_file($_FILES["amend_file"]["tmp_name"], $target_file)) {
-            // Update status to RESUBMITTED
             $stmt = $conn->prepare("UPDATE proposals SET file_path = ?, status = 'RESUBMITTED' WHERE id = ?");
             $stmt->bind_param("si", $target_file, $prop_id);
             if ($stmt->execute()) {
-                notifyAdmin($conn, "Proposal #$prop_id Amended/Resubmitted by $email");
-                $message = "Amendment submitted successfully!"; $messageType = "success";
+                notifySystem($conn, 'admin', "Proposal #$prop_id Amended by $email");
+                $message = "Amendment submitted!"; $messageType = "success";
             }
         }
     }
 }
 
 // =========================================================
-// 3. USE CASE 10: APPEAL REJECTION
+// 3. USE CASE 10: APPEAL PROPOSAL REJECTION (CORRECTED)
 // =========================================================
 if (isset($_POST['appeal_proposal'])) {
     $prop_id = $_POST['proposal_id'];
-    $prop_title = $_POST['proposal_title'];
+    $justification = mysqli_real_escape_string($conn, $_POST['justification']); // The missing piece
     
-    $stmt = $conn->prepare("UPDATE proposals SET status = 'APPEALED' WHERE id = ?");
-    $stmt->bind_param("i", $prop_id);
+    // 1. Insert detailed justification into appeal_requests table
+    $stmt = $conn->prepare("INSERT INTO appeal_requests (proposal_id, researcher_email, justification) VALUES (?, ?, ?)");
+    $stmt->bind_param("iss", $prop_id, $email, $justification);
+    
     if ($stmt->execute()) {
-        notifyAdmin($conn, "Appeal Request: $email appealed rejection of '$prop_title'.");
-        $message = "Appeal sent to Admin/HOD."; $messageType = "success";
+        // 2. Lock status to 'APPEALED' ("Under Appeal")
+        $update = $conn->prepare("UPDATE proposals SET status = 'APPEALED' WHERE id = ?");
+        $update->bind_param("i", $prop_id);
+        $update->execute();
+
+        // 3. Notify HOD (as per SRS: "Routes to HOD")
+        notifySystem($conn, 'hod', "Appeal Request: $email has contested rejection of Proposal #$prop_id.");
+        $message = "Appeal submitted with justification."; $messageType = "success";
+    } else {
+        $message = "Error submitting appeal: " . $conn->error; $messageType = "error";
     }
 }
 
@@ -135,7 +146,6 @@ if (isset($_POST['request_extension'])) {
 // =========================================================
 // DATA FETCHING
 // =========================================================
-// A. All Proposals (For Tracking, Amending, Appealing)
 $sql_props = "SELECT p.*, r.decision as reviewer_decision, r.feedback 
               FROM proposals p 
               LEFT JOIN reviews r ON p.id = r.proposal_id 
@@ -143,11 +153,9 @@ $sql_props = "SELECT p.*, r.decision as reviewer_decision, r.feedback
               ORDER BY p.created_at DESC";
 $my_props = $conn->query($sql_props);
 
-// B. Active Grants (Status = APPROVED) for Reports & Budget
 $sql_grants = "SELECT * FROM proposals WHERE researcher_email = '$email' AND status = 'APPROVED'";
 $my_grants = $conn->query($sql_grants);
 
-// C. My Reports (For checking status/extensions)
 $sql_reports = "SELECT pr.*, p.title as grant_title 
                 FROM progress_reports pr 
                 JOIN proposals p ON pr.proposal_id = p.id 
@@ -163,7 +171,6 @@ $my_reports = $conn->query($sql_reports);
     <link rel="stylesheet" href="style.css">
     <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
     <style>
-        /* Simple Tab & Modal Styles */
         .tab-btn { padding: 10px 20px; cursor: pointer; border: none; background: #eee; font-size:16px; }
         .tab-btn.active { background: #3C5B6F; color: white; }
         .tab-content { display: none; padding: 20px; border: 1px solid #ccc; margin-top: -1px; }
@@ -172,6 +179,7 @@ $my_reports = $conn->query($sql_reports);
         .modal-content { background: white; margin: 10% auto; padding: 20px; width: 50%; border-radius: 8px; }
         .close { float: right; font-size: 28px; cursor: pointer; }
         .budget-card { background: #f8f9fa; padding: 15px; margin-bottom: 10px; border-left: 5px solid #28a745; }
+        textarea { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; resize: vertical; }
     </style>
 </head>
 <body>
@@ -226,11 +234,13 @@ $my_reports = $conn->query($sql_reports);
                                     <button onclick="openModal('amendModal', <?= $row['id'] ?>)" class="btn-edit">Amend</button>
                                 
                                 <?php elseif($row['status'] == 'REJECTED' && $row['reviewer_decision'] == 'REJECT'): ?>
-                                    <form method="POST" style="display:inline;" onsubmit="return confirm('Appeal this rejection?');">
-                                        <input type="hidden" name="proposal_id" value="<?= $row['id'] ?>">
-                                        <input type="hidden" name="proposal_title" value="<?= $row['title'] ?>">
-                                        <button type="submit" name="appeal_proposal" style="background:#e74c3c; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;">Appeal</button>
-                                    </form>
+                                    <button onclick="openAppealModal(<?= $row['id'] ?>)" style="background:#e74c3c; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;">
+                                        Appeal
+                                    </button>
+                                
+                                <?php elseif($row['status'] == 'APPEALED'): ?>
+                                    <span style="color:#e67e22; font-size:12px;">Under Appeal</span>
+                                
                                 <?php else: ?>
                                     <span style="color:#999;">-</span>
                                 <?php endif; ?>
@@ -248,9 +258,7 @@ $my_reports = $conn->query($sql_reports);
                     <div class="budget-card">
                         <h4><?= htmlspecialchars($grant['title']) ?> (ID: <?= $grant['id'] ?>)</h4>
                         <p><strong>Budget:</strong> $<?= number_format($grant['approved_budget'], 2) ?> | 
-                           <strong>Spent:</strong> $<?= number_format($grant['amount_spent'], 2) ?> | 
-                           <strong>Remaining:</strong> $<?= number_format($grant['approved_budget'] - $grant['amount_spent'], 2) ?></p>
-                        
+                           <strong>Spent:</strong> $<?= number_format($grant['amount_spent'], 2) ?></p>
                         <button onclick="openReportModal(<?= $grant['id'] ?>)" class="btn-save" style="margin-top:10px; font-size:12px;">+ Submit Progress Report</button>
                     </div>
                 <?php endwhile; ?>
@@ -276,6 +284,20 @@ $my_reports = $conn->query($sql_reports);
             </table>
         </div>
     </section>
+
+    <div id="appealModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('appealModal')">&times;</span>
+            <h3 style="color:#e74c3c;">Appeal Rejection</h3>
+            <p style="font-size:13px; color:#555;">Please provide a detailed rebuttal/justification for why this proposal should be reconsidered.</p>
+            <form method="POST">
+                <input type="hidden" name="proposal_id" id="appeal_prop_id">
+                <label>Justification:</label><br>
+                <textarea name="justification" rows="5" required placeholder="Explain why the review was factually incorrect..."></textarea><br><br>
+                <button type="submit" name="appeal_proposal" class="btn-save" style="background:#e74c3c;">Submit Appeal</button>
+            </form>
+        </div>
+    </div>
 
     <div id="amendModal" class="modal">
         <div class="modal-content">
@@ -310,7 +332,7 @@ $my_reports = $conn->query($sql_reports);
             <form method="POST">
                 <input type="hidden" name="report_id" id="ext_report_id">
                 <label>New Deadline:</label> <input type="date" name="new_date" required><br><br>
-                <label>Justification:</label> <textarea name="justification" style="width:100%;" required></textarea><br><br>
+                <label>Justification:</label> <textarea name="justification" required></textarea><br><br>
                 <button type="submit" name="request_extension" class="btn-save">Submit Request</button>
             </form>
         </div>
@@ -329,6 +351,10 @@ $my_reports = $conn->query($sql_reports);
         function openModal(id, propId) {
             document.getElementById(id).style.display = "block";
             if(propId) document.getElementById('amend_prop_id').value = propId;
+        }
+        function openAppealModal(propId) {
+            document.getElementById('appealModal').style.display = "block";
+            document.getElementById('appeal_prop_id').value = propId;
         }
         function openReportModal(grantId) {
             document.getElementById('reportModal').style.display = "block";
