@@ -30,7 +30,8 @@ if (isset($_POST['register'])) {
     $checkEmail->store_result();
 
     if ($checkEmail->num_rows > 0) {
-        $_SESSION['message'] = "Email already exists!";
+        $_SESSION['register_error'] = "Email already exists!"; // Changed from 'message'
+        $_SESSION['active_form'] = 'register'; // Switch to register tab
         $checkEmail->close();
         header("Location: index.php");
         exit();
@@ -56,8 +57,10 @@ if (isset($_POST['login'])) {
     $email    = trim($_POST['email'] ?? '');
     $password = $_POST['password'] ?? '';
 
+    // Error 1: Empty Fields
     if ($email === '' || $password === '') {
-        $_SESSION['message'] = "Please fill in email and password.";
+        $_SESSION['login_error'] = "Please fill in email and password.";
+        $_SESSION['active_form'] = 'login'; // Keep login form open
         header("Location: index.php");
         exit();
     }
@@ -71,11 +74,19 @@ if (isset($_POST['login'])) {
         $user = $result->fetch_assoc();
 
         if (password_verify($password, $user['password'])) {
+            // SUCCESS: Login User
             $_SESSION['name'] = $user['name'];
             $_SESSION['role'] = $user['role'];
             $_SESSION['email'] = $user['email'];
-            $_SESSION['profile_pic'] = $row['profile_pic'];
-
+            
+            // Remember Me Logic (from previous step)
+            if (isset($_POST['remember_me'])) {
+                setcookie('user_email', $email, time() + (86400 * 30), "/"); 
+            } else {
+                if (isset($_COOKIE['user_email'])) {
+                    setcookie('user_email', '', time() - 3600, "/"); 
+                }
+            }
 
             // Redirect based on role
             if ($user['role'] === 'researcher') {
@@ -87,20 +98,24 @@ if (isset($_POST['login'])) {
             } elseif ($user['role'] === 'admin') {
                 header("Location: admin_page.php");
             } else {
-                // Fallback
                 header("Location: index.php");
             }
             $stmt->close();
             exit();
+
         } else {
-            $_SESSION['message'] = "Incorrect password!";
+            // Error 2: Wrong Password
+            $_SESSION['login_error'] = "Incorrect password!";
+            $_SESSION['active_form'] = 'login'; // Keep login form open
         }
     } else {
-        $_SESSION['message'] = "Email not found!";
+        // Error 3: Email Not Found
+        $_SESSION['login_error'] = "Email not found!";
+        $_SESSION['active_form'] = 'login'; // Keep login form open
     }
 
     $stmt->close();
-    header("Location: index.php");
+    header("Location: index.php"); // Redirect back to show error
     exit();
 }
 ?>

@@ -118,6 +118,9 @@ if (isset($_POST['amend_proposal'])) {
             $stmt->bind_param("ssis", $target_file, $amendment_notes, $prop_id, $email);
             
             if ($stmt->execute()) {
+                $reset_rev = $conn->prepare("UPDATE reviews SET status = 'Pending', decision = NULL, review_date = NULL WHERE proposal_id = ?");
+                $reset_rev->bind_param("i", $prop_id);
+                $reset_rev->execute();
                 // Notify the original reviewer
                 notifySystem($conn, 'reviewer', "Proposal #$prop_id has been amended and resubmitted by $email. Please verify corrections.");
                 $message = "Amendment submitted successfully! The reviewer will be notified."; 
