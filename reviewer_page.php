@@ -169,7 +169,7 @@ $reports = $rep_stmt->get_result();
                 ?>   
                     <div class="card" style="width: 300px; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); background: white; <?= $card_style ?>">
                         <div style="display:flex; justify-content:space-between; align-items:start; margin-bottom: 5px;">
-                            <h3 style="color: #3C5B6F; font-size: 18px; margin: 0;"><?= htmlspecialchars($row['title']) ?></h3>
+                            <h3><?= htmlspecialchars($row['title']) ?></h3>
                         </div>
                         <div style="margin-bottom: 10px;"><?= $badge ?></div>
                         <p style="color: #666; font-size: 13px; margin-bottom: 15px;">

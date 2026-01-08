@@ -1,134 +1,158 @@
 <?php
 session_start();
-$errors = [
-    'login' => $_SESSION['login_error'] ?? '',
-    'register' => $_SESSION['register_error'] ?? ''
-];
-$activeForm = $_SESSION['active_form'] ?? 'login';
 
-session_unset();
-
-function showError($errors) {
-   return !empty($errors) ? '<div class="error-message">' . htmlspecialchars($errors) . '</div>' : '';
+// 1. CAPTURE & CLEAR ERRORS
+// We check if the backend (login_register.php) set any error messages
+$globalError = '';
+if (isset($_SESSION['login_error'])) {
+    $globalError = $_SESSION['login_error'];
+    unset($_SESSION['login_error']);
+} elseif (isset($_SESSION['register_error'])) {
+    $globalError = $_SESSION['register_error'];
+    unset($_SESSION['register_error']);
+} elseif (isset($_SESSION['message'])) {
+    $globalError = $_SESSION['message'];
+    unset($_SESSION['message']);
 }
-
-function isActiveForm($formName, $activeForm) {
-    return $formName === $activeForm ? 'active' : '';
-}
-
 ?>
-
-
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Research Grant System</title>
+    <title>Research Grant Management System</title>
     <link rel="stylesheet" href="loginpage.css">
+    <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
+    <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
 </head>
-
 <body>
 
-    <!-- NAVBAR -->
     <header>
-        <h2 class="logo">Research Grant System</h2>
+        <h2 class="logo">Research Grant Management System</h2>
         <nav class="navigation">
             <a href="#">Home</a>
-            <a href="#">About</a>
-            <a href="#">Contact</a>
-
-            <!-- this still opens your login popup -->
+            <a href="#about">About</a>
+            <a href="#contact">Contact</a>
             <button class="btnLogin-popup">Login</button>
         </nav>
     </header>
 
-    <!-- HERO SECTION (HOME PAGE) -->
-    <main class="hero">
-        <div class="hero-text">
-            <!-- <p class="badge">Best Coffee</p> -->
-            <h1>Manage Research Grants with Confident !</h1>
-            <p class="subtitle">
-                Comprehensive grant management platform for research institutions. Track funding, manage applications, and collaborate seamlessly.
-            </p>
+    <?php if ($globalError): ?>
+    <div class="global-alert" id="globalAlert">
+        <span class="alert-icon"><ion-icon name="alert-circle"></ion-icon></span>
+        <span class="alert-text"><?php echo htmlspecialchars($globalError); ?></span>
+        <span class="close-btn" onclick="document.getElementById('globalAlert').style.display='none';">&times;</span>
+    </div>
+    <?php endif; ?>
 
+    <section class="hero">
+        <div class="hero-text">
+            <h1>Manage Research Grants<br>Confidently !</h1>
+            <p class="subtitle">Comprehensive grant management platform for research institutions. Track funding, manage applications, and collaborate seamlessly.</p>
+            
             <div class="hero-buttons">
-                <!-- also opens the login popup -->
-                <button class="btnLogin-popup hero-btn primary">Start Now</button>
-                <a href="#contact" class="hero-btn outline">Contact Us</a>
+                <button class="hero-btn primary btnLogin-popup-hero">Get Started</button>
+                <a href="#about" class="hero-btn outline">Learn More</a>
             </div>
         </div>
+    </section>
 
-        <div class="hero-image">
-            <!-- change coffee-cup.png to your image file name -->
-            <img src="research.png" alt="Research Grants">
-        </div>
-    </main>
+    <section id="about" class="content-section">
+        <h2>About Us</h2>
+        <p>
+            The Research Grant Management System (RGMS) is designed to help institutions manage the complex lifecycle of research grants. 
+            From initial proposal submission to final review and funding allocation, our system ensures transparency, efficiency, and ease of use for Researchers, Reviewers, and Administrators.
+        </p>
+    </section>
 
-    <!-- LOGIN & REGISTER POPUP -->
+    <section id="contact" class="content-section">
+        <h2>Contact Us</h2>
+        <p>
+            Have questions or need support? Reach out to our administrative team at <strong>admin@rgms.edu</strong> or call us at <strong>+123-456-7890</strong>.
+            We are available Monday through Friday, 9:00 AM to 5:00 PM.
+        </p>
+    </section>
+
     <div class="wrapper">
         <span class="icon-close"><ion-icon name="close"></ion-icon></span>
 
-        <div class="form-box login <?= isActiveForm('login', $activeForm) ?>">
-            <form action="login_register.php" method="post">
+        <div class="form-box login">
             <h2>Login</h2>
-            <?= showError($errors['login']) ?>
+            <form action="login_register.php" method="POST">
+                
                 <div class="input-box">
                     <span class="icon"><ion-icon name="mail"></ion-icon></span>
-                    <input type="email" name="email" required>
+                    <input type="email" name="email" required 
+                           value="<?php echo isset($_COOKIE['user_email']) ? htmlspecialchars($_COOKIE['user_email']) : ''; ?>">
                     <label>Email</label>
                 </div>
+
                 <div class="input-box">
-                    <span class="icon"><ion-icon name="unlock"></ion-icon></span>
+                    <span class="icon" onclick="togglePassword(this)">
+                        <ion-icon name="eye-off"></ion-icon>
+                    </span>
                     <input type="password" name="password" required>
                     <label>Password</label>
                 </div>
+
                 <div class="remember-forgot">
-                    <label><input type="checkbox">Remember me</label>
-                    <a href="#">Forgot Password?</a>
+                    <label>
+                        <input type="checkbox" name="remember_me" 
+                        <?php echo isset($_COOKIE['user_email']) ? 'checked' : ''; ?>>
+                        Remember me
+                    </label>
+                    <a href="forgot_password.php">Forgot Password?</a>
                 </div>
+
                 <button type="submit" name="login" class="btn">Login</button>
+
                 <div class="login-register">
                     <p>Don't have an account? <a href="#" class="register-link">Register</a></p>
                 </div>
             </form>
         </div>
 
-        <div class="form-box register <?= isActiveForm('register', $activeForm) ?>">
-            <form action="login_register.php" method="post">
+        <div class="form-box register">
             <h2>Registration</h2>
-            <?= showError($errors['register']) ?>
+            <form action="login_register.php" method="POST">
+                
                 <div class="input-box">
                     <span class="icon"><ion-icon name="person"></ion-icon></span>
                     <input type="text" name="name" required>
                     <label>Username</label>
                 </div>
+
                 <div class="input-box">
                     <span class="icon"><ion-icon name="mail"></ion-icon></span>
                     <input type="email" name="email" required>
                     <label>Email</label>
                 </div>
+
                 <div class="input-box">
-                    <span class="icon"><ion-icon name="unlock"></ion-icon></span>
+                    <span class="icon" onclick="togglePassword(this)">
+                        <ion-icon name="eye-off"></ion-icon>
+                    </span>
                     <input type="password" name="password" required>
                     <label>Password</label>
                 </div>
+
                 <div class="input-box">
-                    <span class="icon"><ion-icon name="shield-checkmark"></ion-icon></span>
+                    <span class="icon" style="pointer-events:none;"><ion-icon name="briefcase"></ion-icon></span>
                     <select name="role" required>
-                        <option value="" disabled selected>Select Role</option>
+                        <option value="" disabled selected hidden>Select Role</option>
                         <option value="researcher">Researcher</option>
                         <option value="reviewer">Reviewer</option>
                         <option value="hod">HOD</option>
                         <option value="admin">Admin</option>
                     </select>
                 </div>
+
                 <div class="remember-forgot">
-                    <label><input type="checkbox">I agree the terms & conditions</label>
+                    <label><input type="checkbox" required> I agree to the terms & conditions</label>
                 </div>
-                <button type="submit" name="register" class="btn" >Register</button>
+
+                <button type="submit" name="register" class="btn">Register</button>
+
                 <div class="login-register">
                     <p>Already have an account? <a href="#" class="login-link">Login</a></p>
                 </div>
@@ -136,11 +160,54 @@ function isActiveForm($formName, $activeForm) {
         </div>
     </div>
 
-    <script src="script.js"></script>
-    <script type="module"
-        src="https://unpkg.com/ionicons@4.5.10-0/dist/ionicons/ionicons.esm.js"></script>
-    <script nomodule
-        src="https://unpkg.com/ionicons@4.5.10-0/dist/ionicons/ionicons.js"></script>
+    <script>
+        const wrapper = document.querySelector('.wrapper');
+        const loginLink = document.querySelector('.login-link');
+        const registerLink = document.querySelector('.register-link');
+        const btnPopup = document.querySelector('.btnLogin-popup');
+        const btnPopupHero = document.querySelector('.btnLogin-popup-hero'); 
+        const iconClose = document.querySelector('.icon-close');
+        
+        // Switch to Register Form
+        registerLink.addEventListener('click', () => {
+            wrapper.classList.add('active');
+        });
 
+        // Switch back to Login Form
+        loginLink.addEventListener('click', () => {
+            wrapper.classList.remove('active');
+        });
+
+        // Open Popup (Navbar)
+        btnPopup.addEventListener('click', () => {
+            wrapper.classList.add('active-popup');
+        });
+
+        // Open Popup (Hero Button)
+        if(btnPopupHero) {
+            btnPopupHero.addEventListener('click', () => {
+                wrapper.classList.add('active-popup');
+            });
+        }
+
+        // Close Popup
+        iconClose.addEventListener('click', () => {
+            wrapper.classList.remove('active-popup');
+        });
+
+        // Toggle Password Visibility
+        function togglePassword(iconSpan) {
+            const input = iconSpan.parentElement.querySelector('input');
+            const icon = iconSpan.querySelector('ion-icon');
+            
+            if (input.type === 'password') {
+                input.type = 'text';
+                icon.setAttribute('name', 'eye');
+            } else {
+                input.type = 'password';
+                icon.setAttribute('name', 'eye-off');
+            }
+        }
+    </script>
 </body>
 </html>

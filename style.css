@@ -251,6 +251,9 @@ body {
     color: #3C5B6F;
     margin-bottom: 5px;
     font-size: 18px;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    word-break: break-word;
 }
 
 .card p {

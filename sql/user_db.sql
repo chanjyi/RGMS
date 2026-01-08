@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Jan 06, 2026 at 09:48 AM
+-- Generation Time: Jan 08, 2026 at 06:36 PM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.0.30
 
@@ -24,12 +24,43 @@ SET time_zone = "+00:00";
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `appeal_requests`
+--
+
+CREATE TABLE `appeal_requests` (
+  `id` int(11) NOT NULL,
+  `proposal_id` int(11) NOT NULL,
+  `researcher_email` varchar(255) NOT NULL,
+  `justification` text NOT NULL,
+  `status` enum('PENDING','APPROVED','REJECTED') DEFAULT 'PENDING',
+  `submitted_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `extension_requests`
+--
+
+CREATE TABLE `extension_requests` (
+  `id` int(11) NOT NULL,
+  `report_id` int(11) NOT NULL,
+  `researcher_email` varchar(255) NOT NULL,
+  `new_deadline` date NOT NULL,
+  `justification` text NOT NULL,
+  `status` enum('PENDING','APPROVED','REJECTED') DEFAULT 'PENDING',
+  `requested_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `misconduct_reports`
 --
 
 CREATE TABLE `misconduct_reports` (
   `id` int(11) NOT NULL,
-  `proposal_id` int(11) NOT NULL,
+  `proposal_id` int(11) DEFAULT NULL,
   `reviewer_email` varchar(255) NOT NULL,
   `researcher_email` varchar(255) NOT NULL,
   `category` enum('Plagiarism','Data Fabrication','Falsification','Unethical Conduct','Other') NOT NULL,
@@ -165,7 +196,32 @@ INSERT INTO `notifications` (`id`, `user_email`, `message`, `is_read`, `created_
 (149, '4@mail.com', 'Appeal Request: Researcher (2@mail.com) has appealed the rejection of \'Appeal 2\'.', 0, '2026-01-06 08:30:10', 'info'),
 (150, '2@mail.com', 'Appeal Update: The HOD has accepted your appeal. Your proposal will be reassigned to a new reviewer.', 0, '2026-01-06 08:30:16', 'info'),
 (151, '11@mail.com', 'Appeal Case: You have been assigned to review proposal #34.', 0, '2026-01-06 08:40:04', 'info'),
-(152, '11@mail.com', 'Appeal Case: You have been assigned to review proposal #35.', 0, '2026-01-06 08:40:10', 'info');
+(152, '11@mail.com', 'Appeal Case: You have been assigned to review proposal #35.', 0, '2026-01-06 08:40:10', 'info'),
+(153, '2@mail.com', 'Update on \'Appeal\': Your proposal status is now appeal_rejected.', 0, '2026-01-06 16:16:26', 'info'),
+(154, '1@mail.com', 'Proposal #21 has been amended and resubmitted by 2@mail.com. Please verify corrections.', 0, '2026-01-08 15:53:48', 'alert'),
+(155, '11@mail.com', 'Proposal #21 has been amended and resubmitted by 2@mail.com. Please verify corrections.', 0, '2026-01-08 15:53:48', 'alert'),
+(156, '1@mail.com', 'Proposal #21 has been amended and resubmitted by 2@mail.com. Please verify corrections.', 0, '2026-01-08 16:01:36', 'alert'),
+(157, '11@mail.com', 'Proposal #21 has been amended and resubmitted by 2@mail.com. Please verify corrections.', 0, '2026-01-08 16:01:36', 'alert');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `progress_reports`
+--
+
+CREATE TABLE `progress_reports` (
+  `id` int(11) NOT NULL,
+  `proposal_id` int(11) NOT NULL,
+  `researcher_email` varchar(255) NOT NULL,
+  `title` varchar(255) NOT NULL,
+  `achievements` text DEFAULT NULL,
+  `challenges` text DEFAULT NULL,
+  `file_path` varchar(255) NOT NULL,
+  `deadline` date DEFAULT NULL,
+  `status` enum('PENDING_REVIEW','APPROVED','REJECTED') DEFAULT 'PENDING_REVIEW',
+  `submission_date` date DEFAULT curdate(),
+  `submitted_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
 
@@ -176,42 +232,49 @@ INSERT INTO `notifications` (`id`, `user_email`, `message`, `is_read`, `created_
 CREATE TABLE `proposals` (
   `id` int(11) NOT NULL,
   `title` varchar(255) NOT NULL,
+  `description` text DEFAULT NULL,
   `researcher_email` varchar(255) NOT NULL,
   `file_path` varchar(255) NOT NULL,
   `reviewer_email` varchar(255) DEFAULT NULL,
-  `status` enum('SUBMITTED','ASSIGNED','PENDING_REVIEW','REQUIRES_AMENDMENT','RESUBMITTED','RECOMMEND','REJECTED','APPROVED','APPEALED','APPEAL_REJECTED','UNDER_INVESTIGATION','PENDING_REASSIGNMENT') DEFAULT NULL,
+  `status` enum('DRAFT','SUBMITTED','ASSIGNED','PENDING_REVIEW','REQUIRES_AMENDMENT','RESUBMITTED','RECOMMEND','RECOMMENDED','REJECTED','APPROVED','APPEALED','APPEAL_REJECTED','UNDER_INVESTIGATION','PENDING_REASSIGNMENT') DEFAULT 'SUBMITTED',
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `approved_at` datetime DEFAULT NULL,
+  `resubmitted_at` datetime DEFAULT NULL,
   `priority` enum('Normal','High') DEFAULT 'Normal',
-  `reviewer_feedback` text DEFAULT NULL
+  `reviewer_feedback` text DEFAULT NULL,
+  `amendment_notes` text DEFAULT NULL,
+  `budget_requested` decimal(10,2) DEFAULT 0.00,
+  `approved_budget` decimal(10,2) DEFAULT 0.00,
+  `amount_spent` decimal(10,2) DEFAULT 0.00
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
 -- Dumping data for table `proposals`
 --
 
-INSERT INTO `proposals` (`id`, `title`, `researcher_email`, `file_path`, `reviewer_email`, `status`, `created_at`, `priority`, `reviewer_feedback`) VALUES
-(2, 'Approval', '2@mail.com', 'uploads/prop_1766776144_2_mail_com.pdf', NULL, 'APPROVED', '2025-12-26 19:09:04', 'Normal', NULL),
-(3, 'Recommended', '2@mail.com', 'uploads/prop_1766776494_2_mail_com.pdf', NULL, 'APPROVED', '2025-12-26 19:14:54', 'Normal', NULL),
-(9, 'test', '2@mail.com', 'uploads/prop_1767508320_2_mail_com.pdf', NULL, 'REJECTED', '2026-01-04 06:32:00', 'Normal', NULL),
-(10, 'urgent', '2@mail.com', 'uploads/prop_1767508866_2_mail_com.pdf', NULL, 'APPROVED', '2026-01-04 06:41:06', 'High', NULL),
-(11, 'check feedback', '2@mail.com', 'uploads/prop_1767509652_2_mail_com.pdf', NULL, 'RECOMMEND', '2026-01-04 06:54:12', 'Normal', NULL),
-(12, 'request amendment', '2@mail.com', 'uploads/prop_1767510981_2_mail_com.pdf', NULL, 'REQUIRES_AMENDMENT', '2026-01-04 07:16:21', 'Normal', 'not good enough'),
-(13, 'feedback sequence', '2@mail.com', 'uploads/prop_1767511994_2_mail_com.pdf', NULL, 'REQUIRES_AMENDMENT', '2026-01-04 07:33:14', 'Normal', 'feedback'),
-(14, 'recommend', '2@mail.com', 'uploads/prop_1767518395_2_mail_com.pdf', NULL, 'APPROVED', '2026-01-04 09:19:55', 'Normal', NULL),
-(15, 'reject', '2@mail.com', 'uploads/prop_1767518612_2_mail_com.pdf', NULL, 'REJECTED', '2026-01-04 09:23:32', 'Normal', NULL),
-(16, 'misconduct', '2@mail.com', 'uploads/prop_1767518655_2_mail_com.pdf', NULL, 'ASSIGNED', '2026-01-04 09:24:15', 'Normal', NULL),
-(17, 'misconduct', '2@mail.com', 'uploads/prop_1767522028_2_mail_com.pdf', NULL, 'UNDER_INVESTIGATION', '2026-01-04 10:20:28', 'Normal', NULL),
-(18, 'misconduct', '2@mail.com', 'uploads/prop_1767522906_2_mail_com.pdf', NULL, 'UNDER_INVESTIGATION', '2026-01-04 10:35:06', 'Normal', NULL),
-(19, 'misconduct2', '2@mail.com', 'uploads/prop_1767546105_2_mail_com.pdf', NULL, 'UNDER_INVESTIGATION', '2026-01-04 17:01:45', 'Normal', NULL),
-(21, 'annotate', '2@mail.com', 'uploads/prop_1767549401_2_mail_com.pdf', NULL, 'REQUIRES_AMENDMENT', '2026-01-04 17:56:41', 'Normal', 'bye'),
-(22, 'annotate_reject', '2@mail.com', 'uploads/prop_1767549523_2_mail_com.pdf', NULL, 'REJECTED', '2026-01-04 17:58:43', 'Normal', NULL),
-(23, 'reject by HOD', '2@mail.com', 'uploads/prop_1767681332_2_mail_com.pdf', NULL, 'REJECTED', '2026-01-06 06:35:32', 'Normal', NULL),
-(24, 'hod_notifications', '2@mail.com', 'uploads/prop_1767681968_2_mail_com.pdf', NULL, 'APPROVED', '2026-01-06 06:46:08', 'Normal', NULL),
-(25, 'hod_notifications_Reject', '2@mail.com', 'uploads/prop_1767682126_2_mail_com.pdf', NULL, 'REJECTED', '2026-01-06 06:48:46', 'Normal', NULL),
-(26, 'mute_HOD_notifications', '2@mail.com', 'uploads/prop_1767682300_2_mail_com.pdf', NULL, 'APPROVED', '2026-01-06 06:51:40', 'Normal', NULL),
-(27, 'mute_HOD_Reject_notifications', '2@mail.com', 'uploads/prop_1767682315_2_mail_com.pdf', NULL, 'REJECTED', '2026-01-06 06:51:55', 'Normal', NULL),
-(34, 'Appeal', '2@mail.com', 'uploads/prop_1767687248_2_mail_com.pdf', NULL, 'ASSIGNED', '2026-01-06 08:14:08', 'High', NULL),
-(35, 'Appeal 2', '2@mail.com', 'uploads/prop_1767688164_2_mail_com.pdf', NULL, 'ASSIGNED', '2026-01-06 08:29:24', 'High', NULL);
+INSERT INTO `proposals` (`id`, `title`, `description`, `researcher_email`, `file_path`, `reviewer_email`, `status`, `created_at`, `approved_at`, `resubmitted_at`, `priority`, `reviewer_feedback`, `amendment_notes`, `budget_requested`, `approved_budget`, `amount_spent`) VALUES
+(2, 'Approval', NULL, '2@mail.com', 'uploads/prop_1766776144_2_mail_com.pdf', NULL, 'APPROVED', '2025-12-26 19:09:04', NULL, NULL, 'Normal', NULL, NULL, 0.00, 0.00, 0.00),
+(3, 'Recommended', NULL, '2@mail.com', 'uploads/prop_1766776494_2_mail_com.pdf', NULL, 'APPROVED', '2025-12-26 19:14:54', NULL, NULL, 'Normal', NULL, NULL, 0.00, 0.00, 0.00),
+(9, 'test', NULL, '2@mail.com', 'uploads/prop_1767508320_2_mail_com.pdf', NULL, 'REJECTED', '2026-01-04 06:32:00', NULL, NULL, 'Normal', NULL, NULL, 0.00, 0.00, 0.00),
+(10, 'urgent', NULL, '2@mail.com', 'uploads/prop_1767508866_2_mail_com.pdf', NULL, 'APPROVED', '2026-01-04 06:41:06', NULL, NULL, 'High', NULL, NULL, 0.00, 0.00, 0.00),
+(11, 'check feedback', NULL, '2@mail.com', 'uploads/prop_1767509652_2_mail_com.pdf', NULL, 'RECOMMEND', '2026-01-04 06:54:12', NULL, NULL, 'Normal', NULL, NULL, 0.00, 0.00, 0.00),
+(12, 'request amendment', NULL, '2@mail.com', 'uploads/prop_1767510981_2_mail_com.pdf', NULL, 'REQUIRES_AMENDMENT', '2026-01-04 07:16:21', NULL, NULL, 'Normal', 'not good enough', NULL, 0.00, 0.00, 0.00),
+(13, 'feedback sequence', NULL, '2@mail.com', 'uploads/prop_1767511994_2_mail_com.pdf', NULL, 'REQUIRES_AMENDMENT', '2026-01-04 07:33:14', NULL, NULL, 'Normal', 'feedback', NULL, 0.00, 0.00, 0.00),
+(14, 'recommend', NULL, '2@mail.com', 'uploads/prop_1767518395_2_mail_com.pdf', NULL, 'APPROVED', '2026-01-04 09:19:55', NULL, NULL, 'Normal', NULL, NULL, 0.00, 0.00, 0.00),
+(15, 'reject', NULL, '2@mail.com', 'uploads/prop_1767518612_2_mail_com.pdf', NULL, 'REJECTED', '2026-01-04 09:23:32', NULL, NULL, 'Normal', NULL, NULL, 0.00, 0.00, 0.00),
+(16, 'misconduct', NULL, '2@mail.com', 'uploads/prop_1767518655_2_mail_com.pdf', NULL, 'ASSIGNED', '2026-01-04 09:24:15', NULL, NULL, 'Normal', NULL, NULL, 0.00, 0.00, 0.00),
+(17, 'misconduct', NULL, '2@mail.com', 'uploads/prop_1767522028_2_mail_com.pdf', NULL, 'UNDER_INVESTIGATION', '2026-01-04 10:20:28', NULL, NULL, 'Normal', NULL, NULL, 0.00, 0.00, 0.00),
+(18, 'misconduct', NULL, '2@mail.com', 'uploads/prop_1767522906_2_mail_com.pdf', NULL, 'UNDER_INVESTIGATION', '2026-01-04 10:35:06', NULL, NULL, 'Normal', NULL, NULL, 0.00, 0.00, 0.00),
+(19, 'misconduct2', NULL, '2@mail.com', 'uploads/prop_1767546105_2_mail_com.pdf', NULL, 'UNDER_INVESTIGATION', '2026-01-04 17:01:45', NULL, NULL, 'Normal', NULL, NULL, 0.00, 0.00, 0.00),
+(21, 'annotate', NULL, '2@mail.com', 'uploads/amend_1767888096_21.pdf', NULL, 'RESUBMITTED', '2026-01-04 17:56:41', NULL, '2026-01-09 00:01:36', 'Normal', 'bye', '', 0.00, 0.00, 0.00),
+(22, 'annotate_reject', NULL, '2@mail.com', 'uploads/prop_1767549523_2_mail_com.pdf', NULL, 'REJECTED', '2026-01-04 17:58:43', NULL, NULL, 'Normal', NULL, NULL, 0.00, 0.00, 0.00),
+(23, 'reject by HOD', NULL, '2@mail.com', 'uploads/prop_1767681332_2_mail_com.pdf', NULL, 'REJECTED', '2026-01-06 06:35:32', NULL, NULL, 'Normal', NULL, NULL, 0.00, 0.00, 0.00),
+(24, 'hod_notifications', NULL, '2@mail.com', 'uploads/prop_1767681968_2_mail_com.pdf', NULL, 'APPROVED', '2026-01-06 06:46:08', NULL, NULL, 'Normal', NULL, NULL, 0.00, 0.00, 0.00),
+(25, 'hod_notifications_Reject', NULL, '2@mail.com', 'uploads/prop_1767682126_2_mail_com.pdf', NULL, 'REJECTED', '2026-01-06 06:48:46', NULL, NULL, 'Normal', NULL, NULL, 0.00, 0.00, 0.00),
+(26, 'mute_HOD_notifications', NULL, '2@mail.com', 'uploads/prop_1767682300_2_mail_com.pdf', NULL, 'APPROVED', '2026-01-06 06:51:40', NULL, NULL, 'Normal', NULL, NULL, 0.00, 0.00, 0.00),
+(27, 'mute_HOD_Reject_notifications', NULL, '2@mail.com', 'uploads/prop_1767682315_2_mail_com.pdf', NULL, 'REJECTED', '2026-01-06 06:51:55', NULL, NULL, 'Normal', NULL, NULL, 0.00, 0.00, 0.00),
+(34, 'Appeal', NULL, '2@mail.com', 'uploads/prop_1767687248_2_mail_com.pdf', NULL, 'APPEAL_REJECTED', '2026-01-06 08:14:08', NULL, NULL, 'Normal', NULL, NULL, 0.00, 0.00, 0.00),
+(35, 'Appeal 2', NULL, '2@mail.com', 'uploads/prop_1767688164_2_mail_com.pdf', NULL, 'ASSIGNED', '2026-01-06 08:29:24', NULL, NULL, 'High', NULL, NULL, 0.00, 0.00, 0.00);
 
 -- --------------------------------------------------------
 
@@ -222,6 +285,7 @@ INSERT INTO `proposals` (`id`, `title`, `researcher_email`, `file_path`, `review
 CREATE TABLE `reviews` (
   `id` int(11) NOT NULL,
   `reviewer_id` int(11) NOT NULL,
+  `reviewer_email` varchar(255) DEFAULT NULL,
   `proposal_id` int(11) NOT NULL,
   `status` enum('Pending','Completed') DEFAULT 'Pending',
   `assigned_date` date DEFAULT curdate(),
@@ -236,42 +300,42 @@ CREATE TABLE `reviews` (
 -- Dumping data for table `reviews`
 --
 
-INSERT INTO `reviews` (`id`, `reviewer_id`, `proposal_id`, `status`, `assigned_date`, `type`, `feedback`, `annotated_file`, `decision`, `review_date`) VALUES
-(2, 1, 1, 'Completed', '2025-12-27', '', 'so bad', 'uploads/reviews/rev_1766776110_prop_1766775766_2_mail_com.pdf', 'REJECT', '2025-12-27 03:08:30'),
-(3, 1, 2, 'Completed', '2025-12-27', '', 'good', NULL, 'RECOMMEND', '2025-12-27 03:09:52'),
-(4, 1, 3, 'Completed', '2025-12-27', '', 'great', NULL, 'RECOMMEND', '2025-12-27 03:15:33'),
-(6, 1, 5, 'Completed', '2025-12-27', '', 'good', NULL, 'RECOMMEND', '2025-12-27 03:35:11'),
-(7, 1, 6, '', '2025-12-27', 'Proposal', NULL, NULL, NULL, NULL),
-(8, 1, 1, 'Completed', '2025-12-27', 'Appeal', 'baadddd', NULL, 'REJECT', '2025-12-27 03:44:27'),
-(10, 1, 1, 'Completed', '2025-12-27', 'Appeal', 'bad', NULL, 'RECOMMEND', '2025-12-27 03:48:24'),
-(13, 1, 1, 'Completed', '2025-12-27', 'Appeal', 'bad', NULL, 'REJECT', '2025-12-27 03:52:58'),
-(14, 1, 7, 'Completed', '2025-12-30', 'Proposal', '', NULL, 'RECOMMEND', '2026-01-04 14:23:23'),
-(15, 1, 8, 'Completed', '2026-01-04', 'Proposal', '', NULL, 'RECOMMEND', '2026-01-04 14:23:18'),
-(16, 1, 9, 'Completed', '2026-01-04', 'Proposal', '', NULL, 'RECOMMEND', '2026-01-04 14:38:41'),
-(17, 1, 10, 'Completed', '2026-01-04', 'Proposal', '', NULL, 'RECOMMEND', '2026-01-04 14:42:57'),
-(18, 1, 11, 'Completed', '2026-01-04', 'Proposal', NULL, NULL, 'RECOMMEND', '2026-01-04 15:07:16'),
-(19, 1, 12, 'Completed', '2026-01-04', 'Proposal', 'not good enough', NULL, 'AMENDMENT', '2026-01-04 15:24:41'),
-(20, 1, 13, 'Completed', '2026-01-04', 'Proposal', 'feedback', NULL, 'AMENDMENT', '2026-01-04 17:19:32'),
-(21, 1, 14, 'Completed', '2026-01-04', 'Proposal', 'good', NULL, 'RECOMMEND', '2026-01-04 17:23:00'),
-(22, 1, 15, 'Completed', '2026-01-04', 'Proposal', 'bad', NULL, 'REJECT', '2026-01-04 17:23:52'),
-(23, 1, 16, '', '2026-01-04', 'Proposal', NULL, NULL, NULL, NULL),
-(24, 1, 17, '', '2026-01-04', 'Proposal', NULL, NULL, 'REJECT', '2026-01-04 18:29:17'),
-(25, 1, 18, '', '2026-01-04', 'Proposal', NULL, NULL, 'REJECT', '2026-01-04 18:35:28'),
-(26, 1, 19, '', '2026-01-05', 'Proposal', NULL, NULL, 'REJECT', '2026-01-05 01:12:04'),
-(27, 1, 20, 'Completed', '2026-01-05', 'Proposal', 'CHANGE IMMEDIATELY', NULL, 'AMENDMENT', '2026-01-05 01:53:07'),
-(28, 1, 21, 'Completed', '2026-01-05', 'Proposal', 'bye', 'uploads/reviews/rev_1767549492_BAD.pdf', 'AMENDMENT', '2026-01-05 01:58:12'),
-(29, 1, 22, 'Completed', '2026-01-05', 'Proposal', 'no', 'uploads/reviews/rev_1767549563_BAD.pdf', 'REJECT', '2026-01-05 01:59:23'),
-(30, 1, 23, 'Completed', '2026-01-06', 'Proposal', 'great, reject by HOD', NULL, 'RECOMMEND', '2026-01-06 14:36:40'),
-(31, 1, 24, 'Completed', '2026-01-06', 'Proposal', 'HOD APPROVE', NULL, 'RECOMMEND', '2026-01-06 14:46:38'),
-(32, 1, 25, 'Completed', '2026-01-06', 'Proposal', 'HOD reject', NULL, 'RECOMMEND', '2026-01-06 14:49:09'),
-(33, 1, 26, 'Completed', '2026-01-06', 'Proposal', 'muted approve', NULL, 'RECOMMEND', '2026-01-06 15:44:42'),
-(34, 1, 27, 'Completed', '2026-01-06', 'Proposal', 'muted reject', NULL, 'RECOMMEND', '2026-01-06 15:44:51'),
-(37, 1, 30, 'Completed', '2026-01-06', 'Proposal', 'appeal', NULL, 'REJECT', '2026-01-06 15:39:15'),
-(38, 1, 33, 'Completed', '2026-01-06', 'Proposal', 'bad', NULL, 'REJECT', '2026-01-06 16:04:19'),
-(39, 1, 34, 'Completed', '2026-01-06', 'Proposal', 'bad', NULL, 'REJECT', '2026-01-06 16:14:38'),
-(40, 1, 35, 'Completed', '2026-01-06', 'Proposal', 'bad', NULL, 'REJECT', '2026-01-06 16:29:45'),
-(41, 5, 34, 'Pending', '2026-01-06', 'Appeal', NULL, NULL, NULL, NULL),
-(42, 5, 35, 'Pending', '2026-01-06', 'Appeal', NULL, NULL, NULL, NULL);
+INSERT INTO `reviews` (`id`, `reviewer_id`, `reviewer_email`, `proposal_id`, `status`, `assigned_date`, `type`, `feedback`, `annotated_file`, `decision`, `review_date`) VALUES
+(2, 1, NULL, 1, 'Completed', '2025-12-27', '', 'so bad', 'uploads/reviews/rev_1766776110_prop_1766775766_2_mail_com.pdf', 'REJECT', '2025-12-27 03:08:30'),
+(3, 1, NULL, 2, 'Completed', '2025-12-27', '', 'good', NULL, 'RECOMMEND', '2025-12-27 03:09:52'),
+(4, 1, NULL, 3, 'Completed', '2025-12-27', '', 'great', NULL, 'RECOMMEND', '2025-12-27 03:15:33'),
+(6, 1, NULL, 5, 'Completed', '2025-12-27', '', 'good', NULL, 'RECOMMEND', '2025-12-27 03:35:11'),
+(7, 1, NULL, 6, '', '2025-12-27', 'Proposal', NULL, NULL, NULL, NULL),
+(8, 1, NULL, 1, 'Completed', '2025-12-27', 'Appeal', 'baadddd', NULL, 'REJECT', '2025-12-27 03:44:27'),
+(10, 1, NULL, 1, 'Completed', '2025-12-27', 'Appeal', 'bad', NULL, 'RECOMMEND', '2025-12-27 03:48:24'),
+(13, 1, NULL, 1, 'Completed', '2025-12-27', 'Appeal', 'bad', NULL, 'REJECT', '2025-12-27 03:52:58'),
+(14, 1, NULL, 7, 'Completed', '2025-12-30', 'Proposal', '', NULL, 'RECOMMEND', '2026-01-04 14:23:23'),
+(15, 1, NULL, 8, 'Completed', '2026-01-04', 'Proposal', '', NULL, 'RECOMMEND', '2026-01-04 14:23:18'),
+(16, 1, NULL, 9, 'Completed', '2026-01-04', 'Proposal', '', NULL, 'RECOMMEND', '2026-01-04 14:38:41'),
+(17, 1, NULL, 10, 'Completed', '2026-01-04', 'Proposal', '', NULL, 'RECOMMEND', '2026-01-04 14:42:57'),
+(18, 1, NULL, 11, 'Completed', '2026-01-04', 'Proposal', NULL, NULL, 'RECOMMEND', '2026-01-04 15:07:16'),
+(19, 1, NULL, 12, 'Completed', '2026-01-04', 'Proposal', 'not good enough', NULL, 'AMENDMENT', '2026-01-04 15:24:41'),
+(20, 1, NULL, 13, 'Completed', '2026-01-04', 'Proposal', 'feedback', NULL, 'AMENDMENT', '2026-01-04 17:19:32'),
+(21, 1, NULL, 14, 'Completed', '2026-01-04', 'Proposal', 'good', NULL, 'RECOMMEND', '2026-01-04 17:23:00'),
+(22, 1, NULL, 15, 'Completed', '2026-01-04', 'Proposal', 'bad', NULL, 'REJECT', '2026-01-04 17:23:52'),
+(23, 1, NULL, 16, '', '2026-01-04', 'Proposal', NULL, NULL, NULL, NULL),
+(24, 1, NULL, 17, '', '2026-01-04', 'Proposal', NULL, NULL, 'REJECT', '2026-01-04 18:29:17'),
+(25, 1, NULL, 18, '', '2026-01-04', 'Proposal', NULL, NULL, 'REJECT', '2026-01-04 18:35:28'),
+(26, 1, NULL, 19, '', '2026-01-05', 'Proposal', NULL, NULL, 'REJECT', '2026-01-05 01:12:04'),
+(27, 1, NULL, 20, 'Completed', '2026-01-05', 'Proposal', 'CHANGE IMMEDIATELY', NULL, 'AMENDMENT', '2026-01-05 01:53:07'),
+(28, 1, NULL, 21, 'Pending', '2026-01-05', 'Proposal', 'bye', 'uploads/reviews/rev_1767549492_BAD.pdf', NULL, NULL),
+(29, 1, NULL, 22, 'Completed', '2026-01-05', 'Proposal', 'no', 'uploads/reviews/rev_1767549563_BAD.pdf', 'REJECT', '2026-01-05 01:59:23'),
+(30, 1, NULL, 23, 'Completed', '2026-01-06', 'Proposal', 'great, reject by HOD', NULL, 'RECOMMEND', '2026-01-06 14:36:40'),
+(31, 1, NULL, 24, 'Completed', '2026-01-06', 'Proposal', 'HOD APPROVE', NULL, 'RECOMMEND', '2026-01-06 14:46:38'),
+(32, 1, NULL, 25, 'Completed', '2026-01-06', 'Proposal', 'HOD reject', NULL, 'RECOMMEND', '2026-01-06 14:49:09'),
+(33, 1, NULL, 26, 'Completed', '2026-01-06', 'Proposal', 'muted approve', NULL, 'RECOMMEND', '2026-01-06 15:44:42'),
+(34, 1, NULL, 27, 'Completed', '2026-01-06', 'Proposal', 'muted reject', NULL, 'RECOMMEND', '2026-01-06 15:44:51'),
+(37, 1, NULL, 30, 'Completed', '2026-01-06', 'Proposal', 'appeal', NULL, 'REJECT', '2026-01-06 15:39:15'),
+(38, 1, NULL, 33, 'Completed', '2026-01-06', 'Proposal', 'bad', NULL, 'REJECT', '2026-01-06 16:04:19'),
+(39, 1, NULL, 34, 'Completed', '2026-01-06', 'Proposal', 'bad', NULL, 'REJECT', '2026-01-06 16:14:38'),
+(40, 1, NULL, 35, 'Completed', '2026-01-06', 'Proposal', 'bad', NULL, 'REJECT', '2026-01-06 16:29:45'),
+(41, 5, NULL, 34, 'Completed', '2026-01-06', 'Appeal', 'no more appeal', NULL, 'REJECT', '2026-01-07 00:16:26'),
+(42, 5, NULL, 35, 'Pending', '2026-01-06', 'Appeal', NULL, NULL, NULL, NULL);
 
 -- --------------------------------------------------------
 
@@ -300,7 +364,7 @@ CREATE TABLE `users` (
 --
 
 INSERT INTO `users` (`id`, `name`, `email`, `password`, `role`, `notify_email`, `notify_system`, `profile_pic`, `avatar`, `notify_new_assign`, `notify_appeals`, `notify_hod_approve`, `notify_hod_reject`) VALUES
-(1, 'Ms.reviewer', '1@mail.com', '$2y$10$sxtA2hC.vebtunPSbUxtM.iFcJMFF0xmPS3zRzGhjslcyDNQx7p0m', 'reviewer', 0, 0, 'female.png', 'default', 1, 1, 0, 0),
+(1, 'Ms.reviewer', '1@mail.com', '$2y$10$kAi6KDPOySEKTAXaDwqko.clwfN4A6gPxj4nWWlEtIMWaMP78S3/C', 'reviewer', 0, 0, 'female.png', 'default', 1, 1, 0, 0),
 (2, 'researcher', '2@mail.com', '$2y$10$5xuzeZ.7gbxXW/wBHAKo5.0MGavXIZBvzWDS3Dk1ulQMb38.1X5qy', 'researcher', 1, 1, 'default.png', 'default', 1, 1, 1, 1),
 (3, 'HOD', '3@mail.com', '$2y$10$TB9alxPUk86xQDjNWsa24.ISJllSZGStmk70QCdDlWbhsv4wbGqXe', 'hod', 1, 1, 'default.png', 'default', 1, 1, 1, 1),
 (4, 'mr admin', '4@mail.com', '$2y$10$0dlqy6UIW.iLj0M4.OVCHuNB3JXf9GxMlJScvf5W.Dw4Qw.aeihjC', 'admin', 1, 1, 'default.png', 'default', 1, 1, 1, 1),
@@ -311,16 +375,45 @@ INSERT INTO `users` (`id`, `name`, `email`, `password`, `role`, `notify_email`, 
 --
 
 --
+-- Indexes for table `appeal_requests`
+--
+ALTER TABLE `appeal_requests`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `proposal_id` (`proposal_id`),
+  ADD KEY `researcher_email` (`researcher_email`),
+  ADD KEY `status` (`status`);
+
+--
+-- Indexes for table `extension_requests`
+--
+ALTER TABLE `extension_requests`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `report_id` (`report_id`),
+  ADD KEY `researcher_email` (`researcher_email`),
+  ADD KEY `status` (`status`);
+
+--
 -- Indexes for table `misconduct_reports`
 --
 ALTER TABLE `misconduct_reports`
-  ADD PRIMARY KEY (`id`);
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `misconduct_reports_ibfk_1` (`proposal_id`);
 
 --
 -- Indexes for table `notifications`
 --
 ALTER TABLE `notifications`
   ADD PRIMARY KEY (`id`);
+
+--
+-- Indexes for table `progress_reports`
+--
+ALTER TABLE `progress_reports`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `proposal_id` (`proposal_id`),
+  ADD KEY `researcher_email` (`researcher_email`),
+  ADD KEY `status` (`status`),
+  ADD KEY `deadline` (`deadline`);
 
 --
 -- Indexes for table `proposals`
@@ -346,6 +439,18 @@ ALTER TABLE `users`
 --
 
 --
+-- AUTO_INCREMENT for table `appeal_requests`
+--
+ALTER TABLE `appeal_requests`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `extension_requests`
+--
+ALTER TABLE `extension_requests`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
 -- AUTO_INCREMENT for table `misconduct_reports`
 --
 ALTER TABLE `misconduct_reports`
@@ -355,7 +460,13 @@ ALTER TABLE `misconduct_reports`
 -- AUTO_INCREMENT for table `notifications`
 --
 ALTER TABLE `notifications`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=153;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=158;
+
+--
+-- AUTO_INCREMENT for table `progress_reports`
+--
+ALTER TABLE `progress_reports`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `proposals`
@@ -374,6 +485,34 @@ ALTER TABLE `reviews`
 --
 ALTER TABLE `users`
   MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
+
+--
+-- Constraints for dumped tables
+--
+
+--
+-- Constraints for table `appeal_requests`
+--
+ALTER TABLE `appeal_requests`
+  ADD CONSTRAINT `appeal_requests_ibfk_1` FOREIGN KEY (`proposal_id`) REFERENCES `proposals` (`id`) ON DELETE CASCADE;
+
+--
+-- Constraints for table `extension_requests`
+--
+ALTER TABLE `extension_requests`
+  ADD CONSTRAINT `extension_requests_ibfk_1` FOREIGN KEY (`report_id`) REFERENCES `progress_reports` (`id`) ON DELETE CASCADE;
+
+--
+-- Constraints for table `misconduct_reports`
+--
+ALTER TABLE `misconduct_reports`
+  ADD CONSTRAINT `misconduct_reports_ibfk_1` FOREIGN KEY (`proposal_id`) REFERENCES `proposals` (`id`) ON DELETE SET NULL;
+
+--
+-- Constraints for table `progress_reports`
+--
+ALTER TABLE `progress_reports`
+  ADD CONSTRAINT `progress_reports_ibfk_1` FOREIGN KEY (`proposal_id`) REFERENCES `proposals` (`id`) ON DELETE CASCADE;
 COMMIT;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
