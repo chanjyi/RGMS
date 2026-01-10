@@ -54,6 +54,32 @@ if (isset($_SESSION['email']) && isset($conn)) {
             <span class="tooltip">Dashboard</span>
         </li>
 
+        <?php if (isset($_SESSION['role']) && $_SESSION['role'] == 'hod'): ?>
+        <li>
+            <a href="hod_proposal_management.php" class="<?= $current == 'hod_proposal_management.php' ? 'active' : '' ?>">
+                <i class='bx bx-list-check'></i>
+                <span class="links_name">Proposal Management</span>
+            </a>
+            <span class="tooltip">Proposal Management</span>
+        </li>
+
+        <li>
+            <a href="hod_research_tracking.php" class="<?= $current == 'hod_research_tracking.php' ? 'active' : '' ?>">
+                <i class='bx bx-bar-chart-alt-2'></i>
+                <span class="links_name">Research Progress</span>
+            </a>
+            <span class="tooltip">Research Progress</span>
+        </li>
+
+        <li>
+            <a href="hod_appeal_cases.php" class="<?= $current == 'hod_appeal_cases.php' ? 'active' : '' ?>">
+                <i class='bx bx-message-square-dots'></i>
+                <span class="links_name">Appeal Cases</span>
+            </a>
+            <span class="tooltip">Appeal Cases</span>
+        </li>
+        <?php endif; ?>
+
         <li>
             <a href="profile.php" class="<?= $current == 'profile.php' ? 'active' : '' ?>">
                 <i class='bx bx-user'></i>
