@@ -18,20 +18,17 @@ $hod_data = $hod_result->fetch_assoc();
 $department_id = $hod_data['department_id'] ?? null;
 
 // Get all proposals for this HOD's department that are in RECOMMEND status
-// $proposal_query = "SELECT p.*, 
-//                           r.feedback as reviewer_feedback,
-//                           u.name as researcher_name,
-//                           f.amount_allocated as grant_amount
-//                    FROM proposals p 
-//                    LEFT JOIN reviews r ON p.id = r.proposal_id AND r.status = 'RECOMMENDED'
-//                    LEFT JOIN users u ON p.researcher_email = u.email 
-//                    LEFT JOIN fund f ON p.id = f.proposal_id
-//                    WHERE p.status IN ('RECOMMEND', 'PRIORITIZE') 
-//                    AND p.department_id = ?
-//                    ORDER BY (p.status = 'PRIORITIZE') DESC, p.created_at ASC";
-$proposal_query = "SELECT * FROM proposals WHERE id = ?";
+$proposal_query = "SELECT p.*, 
+                                  r.feedback as reviewer_feedback,
+                                  u.name as researcher_name
+                         FROM proposals p 
+                         LEFT JOIN reviews r ON p.id = r.proposal_id 
+                         LEFT JOIN users u ON p.researcher_email = u.email 
+                         WHERE r.decision = 'RECOMMEND' 
+                         AND p.status NOT IN ('APPROVED','REJECTED')
+                         ORDER BY (p.status = 'PRIORITIZE') DESC, p.created_at ASC";
+// $proposal_query = "SELECT * FROM proposals WHERE id = ?";
 $proposal_stmt = $conn->prepare($proposal_query);
-$proposal_stmt->bind_param("i", $department_id);
 $proposal_stmt->execute();
 $proposal_result = $proposal_stmt->get_result();
 
@@ -70,118 +67,142 @@ $department_balance = $balance_data['available_budget'] ?? 0;
         </div>
         <hr style="opacity: 0.3; margin: 20px 0;">
 
-        <!-- Filter Bar -->
-        <div class="proposal-filter-bar">
-            <div class="filter-group">
-                <label class="filter-label">Filter:</label>
-                <select id="statusFilter" class="filter-input">
-                    <option value="">All Proposals</option>
-                    <option value="PRIORITIZE">High Priority</option>
-                    <option value="RECOMMEND">Standard</option>
-                </select>
-            </div>
-            <div class="filter-group">
-                <input type="text" id="searchFilter" class="filter-input" placeholder="Search by title or researcher...">
-            </div>
-        </div>
-
-        <!-- Available Proposals Section -->
-        <div class="available-proposals-section">
-            <div class="available-header">
-                <i class='bx bx-list-ul'></i> Available Proposals to Rank
-                <span id="proposalCount" class="proposal-count">0 proposals</span>
-            </div>
-            <div id="availableProposals" class="available-proposals-container">
-                <div class="empty-message">No proposals available for review</div>
-            </div>
-        </div>
-
-        <!-- Budget Summary Section -->
-        <div class="budget-summary">
-            <div class="budget-summary-title">
-                <i class='bx bx-wallet'></i> Budget Summary for Top Tier Approvals
-            </div>
-            <div class="budget-row">
-                <span>Department Budget Balance:</span>
-                <span id="deptBalance" style="font-weight: 700;">$<?= number_format($department_balance, 2) ?></span>
-            </div>
-            <div class="budget-row">
-                <span>Total Top Tier Approved Amount:</span>
-                <span id="topTierTotal" style="font-weight: 700;">$0.00</span>
-            </div>
-            <div class="budget-row">
-                <span>Remaining Budget:</span>
-                <span id="remainingBudget" style="font-weight: 700; color: #1b5e20;">$<?= number_format($department_balance, 2) ?></span>
-            </div>
-            <div id="budgetWarning" class="budget-warning" style="display: none;">
-                <i class='bx bx-exclamation-circle'></i> 
-                Warning: Total approved amount exceeds department budget! Please reduce allocations.
-            </div>
-        </div>
-
-        <!-- Tier List Container -->
-        <div class="tier-list-container">
-            <div class="tier-list-wrapper">
-                <!-- TOP TIER -->
-                <div class="tier-section">
-                    <div class="tier-label tier-top">
-                        <span><i class='bx bx-crown'></i> TOP TIER</span>
-                        <span class="tier-budget" id="topBudget">$0.00</span>
-                    </div>
-                    <div class="tier-items" id="topTier" data-tier="top" ondrop="allowDrop(event)" ondragover="dragOver(event)" ondragleave="dragLeave(event)">
-                        <div class="empty-message">Drag proposals here</div>
-                    </div>
-                </div>
-
-                <!-- MIDDLE TIER -->
-                <div class="tier-section">
-                    <div class="tier-label tier-middle">
-                        <span><i class='bx bx-trending-up'></i> MIDDLE TIER</span>
-                        <span class="tier-budget" id="middleBudget">$0.00</span>
-                    </div>
-                    <div class="tier-items" id="middleTier" data-tier="middle" ondrop="allowDrop(event)" ondragover="dragOver(event)" ondragleave="dragLeave(event)">
-                        <div class="empty-message">Drag proposals here</div>
-                    </div>
-                </div>
-
-                <!-- BOTTOM TIER -->
-                <div class="tier-section">
-                    <div class="tier-label tier-bottom">
-                        <span><i class='bx bx-trending-down'></i> BOTTOM TIER</span>
-                        <span class="tier-budget" id="bottomBudget">$0.00</span>
-                    </div>
-                    <div class="tier-items" id="bottomTier" data-tier="bottom" ondrop="allowDrop(event)" ondragover="dragOver(event)" ondragleave="dragLeave(event)">
-                        <div class="empty-message">Drag proposals here</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Action Buttons -->
-        <div class="action-buttons">
-            <button class="btn-reset" onclick="resetTiers()">
-                <i class='bx bx-reset'></i> Reset Tiers
+        <!-- Tab Navigation -->
+        <div style="margin-bottom: 0;">
+            <button class="tab-btn active" onclick="openTab(event, 'proposal-review')">
+                <i class='bx bx-file-blank'></i> Proposal Review
             </button>
-            <button id="approveAllBtn" class="btn-approve-all" onclick="approveAllTopTier()" disabled>
-                <i class='bx bx-check-circle'></i> Approve All Top Tier
+            <button class="tab-btn" onclick="openTab(event, 'tier-ranking')">
+                <i class='bx bx-bar-chart'></i> Tier Ranking & Approval
             </button>
+        </div>
+
+        <!-- TAB 1: PROPOSAL REVIEW -->
+        <div id="proposal-review" class="tab-content active">
+            <!-- Filter Bar -->
+            <div class="proposal-filter-bar">
+                <div class="filter-group">
+                    <label class="filter-label">Filter:</label>
+                    <select id="statusFilter" class="filter-input">
+                        <option value="">All Proposals</option>
+                        <option value="PRIORITIZE">High Priority</option>
+                        <option value="RECOMMEND">Standard</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <input type="text" id="searchFilter" class="filter-input" placeholder="Search by title or researcher...">
+                </div>
+            </div>
+
+            <!-- Available Proposals Section -->
+            <div class="available-proposals-section">
+                <div class="available-header">
+                    <i class='bx bx-list-ul'></i> Recommended Proposals by Reviewers
+                    <span id="proposalCount" class="proposal-count">0 proposals</span>
+                </div>
+                <div id="availableProposals" class="available-proposals-container">
+                    <div class="empty-message">No proposals available for review</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 2: TIER RANKING & APPROVAL -->
+        <div id="tier-ranking" class="tab-content">
+            <!-- Budget Summary Section -->
+            <div class="budget-summary">
+                <div class="budget-summary-title">
+                    <i class='bx bx-wallet'></i> Budget Summary for Top Tier Approvals
+                </div>
+                <div class="budget-row">
+                    <span>Department Budget Balance:</span>
+                    <span id="deptBalance" style="font-weight: 700;">$<?= number_format($department_balance, 2) ?></span>
+                </div>
+                <div class="budget-row">
+                    <span>Total Top Tier Approved Amount:</span>
+                    <span id="topTierTotal" style="font-weight: 700;">$0.00</span>
+                </div>
+                <div class="budget-row">
+                    <span>Remaining Budget:</span>
+                    <span id="remainingBudget" style="font-weight: 700; color: #1b5e20;">$<?= number_format($department_balance, 2) ?></span>
+                </div>
+                <div id="budgetWarning" class="budget-warning" style="display: none;">
+                    <i class='bx bx-exclamation-circle'></i> 
+                    Warning: Total approved amount exceeds department budget! Please reduce allocations.
+                </div>
+            </div>
+
+            <!-- Tier List Container -->
+            <div class="tier-list-container">
+                <div class="tier-list-wrapper">
+                    <!-- TOP TIER -->
+                    <div class="tier-section">
+                        <div class="tier-label tier-top">
+                            <span><i class='bx bx-crown'></i> TOP TIER</span>
+                            <span class="tier-budget" id="topBudget">$0.00</span>
+                        </div>
+                        <div class="tier-items" id="topTier" data-tier="top" ondrop="allowDrop(event)" ondragover="dragOver(event)" ondragleave="dragLeave(event)">
+                            <div class="empty-message">Drag proposals here</div>
+                        </div>
+                    </div>
+
+                    <!-- MIDDLE TIER -->
+                    <div class="tier-section">
+                        <div class="tier-label tier-middle">
+                            <span><i class='bx bx-trending-up'></i> MIDDLE TIER</span>
+                            <span class="tier-budget" id="middleBudget">$0.00</span>
+                        </div>
+                        <div class="tier-items" id="middleTier" data-tier="middle" ondrop="allowDrop(event)" ondragover="dragOver(event)" ondragleave="dragLeave(event)">
+                            <div class="empty-message">Drag proposals here</div>
+                        </div>
+                    </div>
+
+                    <!-- BOTTOM TIER -->
+                    <div class="tier-section">
+                        <div class="tier-label tier-bottom">
+                            <span><i class='bx bx-trending-down'></i> BOTTOM TIER</span>
+                            <span class="tier-budget" id="bottomBudget">$0.00</span>
+                        </div>
+                        <div class="tier-items" id="bottomTier" data-tier="bottom" ondrop="allowDrop(event)" ondragover="dragOver(event)" ondragleave="dragLeave(event)">
+                            <div class="empty-message">Drag proposals here</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="action-buttons">
+                <button class="btn-reset" onclick="resetTiers()">
+                    <i class='bx bx-reset'></i> Reset Tiers
+                </button>
+                <button id="approveAllBtn" class="btn-approve-all" onclick="approveAllTopTier()" disabled>
+                    <i class='bx bx-check-circle'></i> Approve All Top Tier
+                </button>
+            </div>
         </div>
     </section>
 
     <!-- Rubric Modal -->
     <div id="rubricModal" class="rubric-modal">
-        <div class="rubric-content">
+        <div class="rubric-content rubric-split">
             <div class="rubric-header">
                 <h2 class="rubric-title" id="rubricProposalTitle">Proposal Title</h2>
                 <button class="rubric-close" onclick="closeRubricModal()">&times;</button>
             </div>
 
-            <div style="margin-bottom: 20px;">
-                <p style="font-size: 13px; color: #666;">
-                    <strong>Researcher:</strong> <span id="rubricResearcher">-</span><br>
-                    <strong>Requested Budget:</strong> <span id="rubricBudget">-</span>
-                </p>
-            </div>
+            <div class="rubric-layout">
+                <!-- Left Panel: Proposal Display -->
+                <div class="proposal-panel">
+                    <div class="proposal-viewer">
+                        <iframe id="proposalIframe" style="width: 100%; height: 100%; border: 1px solid #ddd; border-radius: 5px;"></iframe>
+                    </div>
+                </div>
+
+                <!-- Right Panel: All Rubric Info -->
+                <div class="rubric-panel">
+                    <div class="proposal-meta">
+                        <div><strong>Researcher:</strong> <span id="rubricResearcher">-</span></div>
+                        <div><strong>Requested Budget:</strong> <span id="rubricBudget">-</span></div>
+                    </div>
 
             <table class="rubric-table">
                 <thead>
@@ -229,7 +250,7 @@ $department_balance = $balance_data['available_budget'] ?? 0;
                 <div class="budget-inputs">
                     <div class="budget-field">
                         <label>Requested Amount</label>
-                        <input type="text" id="requestedBudget" disabled>
+                        <input type="text" id="requestedBudget" class="readonly-field" disabled>
                     </div>
                     <div class="budget-field">
                         <label>Approved Amount</label>
@@ -241,7 +262,7 @@ $department_balance = $balance_data['available_budget'] ?? 0;
             <!-- Notes -->
             <div class="rubric-notes">
                 <label class="rubric-notes-label">Reviewer Feedback</label>
-                <textarea class="rubric-notes-text" id="rubricNotes" readonly></textarea>
+                <textarea class="rubric-notes-text readonly-field" id="reviewerFeedback" readonly></textarea>
             </div>
 
             <div class="rubric-notes">
@@ -252,6 +273,8 @@ $department_balance = $balance_data['available_budget'] ?? 0;
             <div class="action-buttons" style="margin-top: 20px;">
                 <button class="btn-reset" onclick="closeRubricModal()">Close</button>
                 <button class="btn-approve-all" onclick="saveRubric()">Save Rubric</button>
+            </div>
+                </div>
             </div>
         </div>
     </div>
@@ -330,7 +353,7 @@ $department_balance = $balance_data['available_budget'] ?? 0;
             div.className = 'tier-item';
             div.draggable = true;
             div.dataset.proposalId = proposal.id;
-            div.dataset.budget = proposal.grant_amount || 0;
+            div.dataset.budget = proposal.budget_requested || 0;
 
             const priorityBadge = proposal.status === 'PRIORITIZE' 
                 ? '<span class="priority-badge high">High Priority</span>' 
@@ -341,12 +364,12 @@ $department_balance = $balance_data['available_budget'] ?? 0;
                     <div class="tier-item-title">${escapeHtml(proposal.title)}</div>
                     <div class="tier-item-researcher">${escapeHtml(proposal.researcher_name || proposal.researcher_email)}</div>
                     <div style="font-size: 12px; color: #999; margin-top: 5px;">
-                        Requested: $${parseFloat(proposal.grant_amount || 0).toFixed(2)}
+                        Requested: $${parseFloat(proposal.budget_requested || 0).toFixed(2)}
                     </div>
                 </div>
                 <div class="tier-item-actions">
-                    <button class="tier-item-btn" onclick="openRubricModal(${proposal.id})" title="Edit Rubric & Budget">
-                        <i class='bx bx-edit'></i> Edit
+                    <button class="tier-item-btn" onclick="openRubricModal(${proposal.id})" title="Evaluate & Set Budget">
+                        <i class='bx bx-slider-alt'></i> Evaluate
                     </button>
                 </div>
             `;
@@ -431,13 +454,29 @@ $department_balance = $balance_data['available_budget'] ?? 0;
             // Populate modal
             document.getElementById('rubricProposalTitle').textContent = proposal.title;
             document.getElementById('rubricResearcher').textContent = proposal.researcher_name || proposal.researcher_email;
-            document.getElementById('rubricBudget').textContent = `$${parseFloat(proposal.grant_amount || 0).toFixed(2)}`;
-            document.getElementById('requestedBudget').value = `$${parseFloat(proposal.grant_amount || 0).toFixed(2)}`;
-            document.getElementById('rubricNotes').value = proposal.reviewer_feedback || '';
-            document.getElementById('approvedBudget').value = budgetAdjustments[proposalId] || proposal.grant_amount || 0;
+            const requested = parseFloat(proposal.budget_requested || 0);
+            document.getElementById('rubricBudget').textContent = `$${requested.toFixed(2)}`;
+            document.getElementById('requestedBudget').value = `$${requested.toFixed(2)}`;
+            document.getElementById('reviewerFeedback').value = proposal.reviewer_feedback || '';
+            
+            // Display proposal in iframe
+            const iframe = document.getElementById('proposalIframe');
+            const filePath = proposal.file_path || '';
+            if (filePath) {
+                iframe.src = filePath;
+                iframe.style.display = 'block';
+            } else {
+                iframe.style.display = 'none';
+            }
+
+            // Default approved budget equals requested unless adjusted
+            document.getElementById('approvedBudget').value = budgetAdjustments[proposalId] ?? requested;
 
             // Initialize rating stars
             initializeRatingStars(proposalId);
+
+            // Load previously saved rubric from server
+            loadRubric(proposalId);
 
             document.getElementById('rubricModal').classList.add('show');
         }
@@ -467,6 +506,7 @@ $department_balance = $balance_data['available_budget'] ?? 0;
                     });
                     starsContainer.appendChild(star);
                 }
+                document.getElementById(`score-${aspect}`).textContent = scores[aspect] || 0;
             });
         }
 
@@ -495,11 +535,64 @@ $department_balance = $balance_data['available_budget'] ?? 0;
             if (!currentProposalId) return;
 
             const approvedBudget = parseFloat(document.getElementById('approvedBudget').value) || 0;
-            budgetAdjustments[currentProposalId] = approvedBudget;
+            const hodNotes = document.getElementById('hodNotes').value || '';
+            const scores = rubricScores[currentProposalId] || { outcome: 0, impact: 0, alignment: 0, funding: 0 };
 
-            showAlert('Success', 'Rubric saved successfully!', 'success');
-            closeRubricModal();
-            updateBudgetDisplay();
+            const formData = new FormData();
+            formData.append('action', 'save_rubric');
+            formData.append('proposal_id', currentProposalId);
+            formData.append('approved_budget', approvedBudget);
+            formData.append('hod_notes', hodNotes);
+            formData.append('outcome_score', scores.outcome || 0);
+            formData.append('impact_score', scores.impact || 0);
+            formData.append('alignment_score', scores.alignment || 0);
+            formData.append('funding_score', scores.funding || 0);
+
+            fetch('hod_proposal_handler.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(resp => resp.json())
+            .then(data => {
+                if (data.success) {
+                    budgetAdjustments[currentProposalId] = approvedBudget;
+                    showAlert('Success', 'Rubric saved successfully!', 'success');
+                    closeRubricModal();
+                    updateBudgetDisplay();
+                } else {
+                    showAlert('Error', data.message || 'Failed to save rubric', 'error');
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                showAlert('Error', 'An error occurred while saving rubric', 'error');
+            });
+        }
+
+        function loadRubric(proposalId) {
+            const formData = new FormData();
+            formData.append('action', 'get_rubric');
+            formData.append('proposal_id', proposalId);
+
+            fetch('hod_proposal_handler.php', { method: 'POST', body: formData })
+            .then(resp => resp.json())
+            .then(data => {
+                if (data.success && data.rubric) {
+                    rubricScores[proposalId] = {
+                        outcome: data.rubric.outcome_score || 0,
+                        impact: data.rubric.impact_score || 0,
+                        alignment: data.rubric.alignment_score || 0,
+                        funding: data.rubric.funding_score || 0,
+                    };
+                    initializeRatingStars(proposalId);
+                    document.getElementById('hodNotes').value = data.rubric.hod_notes || '';
+                    if (typeof data.approved_budget === 'number') {
+                        document.getElementById('approvedBudget').value = data.approved_budget;
+                        budgetAdjustments[proposalId] = data.approved_budget;
+                    }
+                }
+            })
+            .catch(err => console.error(err));
         }
 
         // Budget Display Functions
@@ -645,6 +738,27 @@ $department_balance = $balance_data['available_budget'] ?? 0;
             // Create draggable proposal items if needed
             // This can be enhanced to show proposals in an "Available" section
         });
+
+        // Tab Switching Function
+        function openTab(evt, tabName) {
+            // Hide all tab contents
+            const tabContents = document.getElementsByClassName('tab-content');
+            for (let i = 0; i < tabContents.length; i++) {
+                tabContents[i].classList.remove('active');
+            }
+
+            // Remove active class from all tab buttons
+            const tabButtons = document.getElementsByClassName('tab-btn');
+            for (let i = 0; i < tabButtons.length; i++) {
+                tabButtons[i].classList.remove('active');
+            }
+
+            // Show the current tab content
+            document.getElementById(tabName).classList.add('active');
+
+            // Add active class to the clicked button
+            evt.currentTarget.classList.add('active');
+        }
     </script>
 </body>
 </html>

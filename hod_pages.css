@@ -217,11 +217,90 @@
     background: white;
     padding: 30px;
     border-radius: 10px;
-    max-width: 700px;
+    max-width: 1400px;
+    width: 95vw;
     max-height: 90vh;
     overflow-y: auto;
     box-shadow: 0 10px 40px rgba(0,0,0,0.3);
     animation: slideUp 0.3s ease;
+}
+.rubric-split .rubric-layout {
+    display: flex;
+    flex-direction: row;
+    gap: 24px;
+    min-height: 650px;
+    align-items: stretch;
+}
+
+.proposal-panel {
+    flex: 1;
+    min-width: 45%;
+    border-right: 2px solid #e0e0e0;
+    padding-right: 20px;
+    display: flex;
+    flex-direction: column;
+}
+
+.rubric-panel {
+    flex: 1;
+    min-width: 45%;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+}
+
+.proposal-meta {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    margin-bottom: 15px;
+    padding: 12px;
+    background: #f8f9fa;
+    border-radius: 5px;
+    color: #153448;
+    border-left: 4px solid #3C5B6F;
+}
+
+.proposal-viewer {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 600px;
+}
+
+.proposal-viewer iframe {
+    width: 100%;
+    height: 100%;
+    flex: 1;
+    min-height: 600px;
+}
+
+.proposal-description {
+    background: #fafafa;
+    border: 1px solid #eee;
+    border-radius: 6px;
+    padding: 12px;
+    min-height: 60px;
+    color: #444;
+    margin-bottom: 12px;
+}
+
+.proposal-file a {
+    color: #3C5B6F;
+    font-weight: 600;
+}
+
+.proposal-readonly-hints {
+    font-size: 12px;
+    color: #777;
+    margin-top: 8px;
+}
+
+.readonly-field {
+    background: #f3f3f3 !important;
+    color: #777 !important;
+    cursor: not-allowed !important;
+    border-color: #ddd !important;
 }
 
 @keyframes slideUp {
@@ -705,4 +784,36 @@
     .budget-inputs {
         flex-direction: column;
     }
+}
+.tab-btn { 
+    padding: 12px 24px; 
+    cursor: pointer; 
+    border: none; 
+    background: #eee; 
+    font-size: 15px; 
+    margin-right: 2px; 
+    border-radius: 5px 5px 0 0; 
+    transition: 0.3s;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+.tab-btn:hover { 
+    background: #ddd; 
+}
+.tab-btn.active { 
+    background: #3C5B6F; 
+    color: white; 
+}
+.tab-content { 
+    display: none; 
+    padding: 25px; 
+    border: 1px solid #ddd; 
+    margin-top: -1px; 
+    border-radius: 0 5px 5px 5px; 
+    background: white; 
+}
+.tab-content.active { 
+    display: block; 
 }

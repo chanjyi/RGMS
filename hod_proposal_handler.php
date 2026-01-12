@@ -181,7 +181,7 @@ elseif ($action === 'save_rubric') {
 
         // Insert or update rubric
         $rubric_insert = "INSERT INTO proposal_rubric 
-                          (proposalId, hod_id, outcome_score, impact_score, alignment_score, funding_score, total_score, hod_notes)
+                          (proposal_id, hod_id, outcome_score, impact_score, alignment_score, funding_score, total_score, hod_notes)
                           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                           ON DUPLICATE KEY UPDATE 
                           outcome_score = ?, impact_score = ?, alignment_score = ?, funding_score = ?, total_score = ?, hod_notes = ?";
@@ -194,6 +194,13 @@ elseif ($action === 'save_rubric') {
         );
         $rubric_stmt->execute();
 
+        // Optionally update proposal approved_budget to reflect HOD input
+        if ($approved_budget >= 0) {
+            $upd = $conn->prepare("UPDATE proposals SET approved_budget = ? WHERE id = ?");
+            $upd->bind_param("di", $approved_budget, $proposal_id);
+            $upd->execute();
+        }
+
         echo json_encode(['success' => true, 'message' => 'Rubric saved successfully']);
 
     } catch (Exception $e) {
@@ -201,6 +208,39 @@ elseif ($action === 'save_rubric') {
     }
 }
 else {
-    echo json_encode(['success' => false, 'message' => 'Invalid action']);
+    // Extra action: get_rubric
+    if ($action === 'get_rubric') {
+        try {
+            $proposal_id = intval($_POST['proposal_id'] ?? 0);
+            if ($proposal_id <= 0) {
+                echo json_encode(['success' => false, 'message' => 'Invalid proposal ID']);
+                exit();
+            }
+
+            $rubric = null;
+            $stmt = $conn->prepare("SELECT outcome_score, impact_score, alignment_score, funding_score, total_score, hod_notes FROM proposal_rubric WHERE proposal_id = ? AND hod_id = ?");
+            $stmt->bind_param("ii", $proposal_id, $hod_id);
+            $stmt->execute();
+            $res = $stmt->get_result();
+            if ($res && $res->num_rows > 0) {
+                $rubric = $res->fetch_assoc();
+            }
+
+            $approved_budget = null;
+            $pstmt = $conn->prepare("SELECT approved_budget FROM proposals WHERE id = ?");
+            $pstmt->bind_param("i", $proposal_id);
+            $pstmt->execute();
+            $pres = $pstmt->get_result();
+            if ($pres && ($prow = $pres->fetch_assoc())) {
+                $approved_budget = floatval($prow['approved_budget']);
+            }
+
+            echo json_encode(['success' => true, 'rubric' => $rubric, 'approved_budget' => $approved_budget]);
+        } catch (Exception $e) {
+            echo json_encode(['success' => false, 'message' => 'Error: ' . $e->getMessage()]);
+        }
+    } else {
+        echo json_encode(['success' => false, 'message' => 'Invalid action']);
+    }
 }
 ?>
