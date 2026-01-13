@@ -177,28 +177,84 @@ elseif ($action === 'save_rubric') {
             exit();
         }
 
+        // Get the proposal details to check requested budget
+        $prop_query = "SELECT budget_requested FROM proposals WHERE id = ?";
+        $prop_stmt = $conn->prepare($prop_query);
+        $prop_stmt->bind_param("i", $proposal_id);
+        $prop_stmt->execute();
+        $prop_result = $prop_stmt->get_result();
+        $proposal = $prop_result->fetch_assoc();
+
+        if (!$proposal) {
+            echo json_encode(['success' => false, 'message' => 'Proposal not found']);
+            exit();
+        }
+
+        $requested_budget = floatval($proposal['budget_requested'] ?? 0);
+
+        // Validation: Approved budget must be less than or equal to requested amount
+        if ($approved_budget > $requested_budget) {
+            echo json_encode([
+                'success' => false, 
+                'message' => 'Approved budget cannot exceed the requested amount ($' . number_format($requested_budget, 2) . ')'
+            ]);
+            exit();
+        }
+
         $total_score = $outcome + $impact + $alignment + $funding;
 
-        // Insert or update rubric
-        $rubric_insert = "INSERT INTO proposal_rubric 
-                          (proposal_id, hod_id, outcome_score, impact_score, alignment_score, funding_score, total_score, hod_notes)
-                          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                          ON DUPLICATE KEY UPDATE 
-                          outcome_score = ?, impact_score = ?, alignment_score = ?, funding_score = ?, total_score = ?, hod_notes = ?";
+        // Try to update existing rubric first
+        $rubric_update = "UPDATE proposal_rubric 
+                          SET outcome_score = ?, impact_score = ?, alignment_score = ?, funding_score = ?, total_score = ?, hod_notes = ?, is_evaluated = 1
+                          WHERE proposal_id = ? AND hod_id = ?";
         
-        $rubric_stmt = $conn->prepare($rubric_insert);
-        $rubric_stmt->bind_param(
-            "iiiiiiisiiiiis",
-            $proposal_id, $hod_id, $outcome, $impact, $alignment, $funding, $total_score, $hod_notes,
-            $outcome, $impact, $alignment, $funding, $total_score, $hod_notes
+        $update_stmt = $conn->prepare($rubric_update);
+        if (!$update_stmt) {
+            echo json_encode(['success' => false, 'message' => 'Error preparing update: ' . $conn->error]);
+            exit();
+        }
+
+        $update_stmt->bind_param(
+            "iiiiisii",
+            $outcome, $impact, $alignment, $funding, $total_score, $hod_notes,
+            $proposal_id, $hod_id
         );
-        $rubric_stmt->execute();
+        
+        if (!$update_stmt->execute()) {
+            echo json_encode(['success' => false, 'message' => 'Error executing update: ' . $update_stmt->error]);
+            exit();
+        }
+
+        // If no rows were updated, insert a new rubric record
+        if ($update_stmt->affected_rows === 0) {
+            $rubric_insert = "INSERT INTO proposal_rubric 
+                              (proposal_id, hod_id, outcome_score, impact_score, alignment_score, funding_score, total_score, hod_notes, is_evaluated)
+                              VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)";
+            
+            $insert_stmt = $conn->prepare($rubric_insert);
+            if (!$insert_stmt) {
+                echo json_encode(['success' => false, 'message' => 'Error preparing insert: ' . $conn->error]);
+                exit();
+            }
+
+            $insert_stmt->bind_param(
+                "iiiiiiis",
+                $proposal_id, $hod_id, $outcome, $impact, $alignment, $funding, $total_score, $hod_notes
+            );
+            
+            if (!$insert_stmt->execute()) {
+                echo json_encode(['success' => false, 'message' => 'Error executing insert: ' . $insert_stmt->error]);
+                exit();
+            }
+        }
 
         // Optionally update proposal approved_budget to reflect HOD input
         if ($approved_budget >= 0) {
             $upd = $conn->prepare("UPDATE proposals SET approved_budget = ? WHERE id = ?");
-            $upd->bind_param("di", $approved_budget, $proposal_id);
-            $upd->execute();
+            if ($upd) {
+                $upd->bind_param("di", $approved_budget, $proposal_id);
+                $upd->execute();
+            }
         }
 
         echo json_encode(['success' => true, 'message' => 'Rubric saved successfully']);

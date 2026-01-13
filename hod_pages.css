@@ -4,6 +4,103 @@
    =========================== */
 
 /* ===========================
+   RUBRIC WEIGHTAGE CUSTOMIZATION
+   =========================== */
+.weightage-customization-section {
+    background: white;
+    border-radius: 10px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+    margin-bottom: 20px;
+    padding: 20px;
+    border-left: 4px solid #FF9800;
+}
+
+.weightage-header {
+    font-weight: 700;
+    font-size: 16px;
+    color: #3C5B6F;
+    margin-bottom: 15px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.weightage-message {
+    font-size: 12px;
+    color: #FF6F00;
+    font-weight: 600;
+    margin-left: auto;
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+.weightage-controls {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 20px;
+}
+
+.weightage-item {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.weightage-item label {
+    font-weight: 600;
+    color: #3C5B6F;
+    font-size: 13px;
+}
+
+.weightage-slider-group {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.weightage-slider {
+    flex: 1;
+    height: 6px;
+    border-radius: 3px;
+    background: #ddd;
+    outline: none;
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.weightage-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #3C5B6F;
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.weightage-slider::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #3C5B6F;
+    cursor: pointer;
+    border: none;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.weightage-value {
+    min-width: 40px;
+    text-align: center;
+    font-weight: 600;
+    color: #3C5B6F;
+    background: #f0f0f0;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 13px;
+}
+
+/* ===========================
    AVAILABLE PROPOSALS SECTION
    =========================== */
 .available-proposals-section {
