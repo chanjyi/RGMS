@@ -101,6 +101,70 @@
 }
 
 /* ===========================
+   PROPOSAL FILTER BAR
+   =========================== */
+.proposal-filter-bar {
+    background: #f9f9f9;
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+}
+
+.filter-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+    min-width: 250px;
+}
+
+.filter-label {
+    font-weight: 600;
+    color: #3C5B6F;
+    font-size: 13px;
+    white-space: nowrap;
+}
+
+.filter-checkboxes {
+    display: flex;
+    gap: 15px;
+    flex-wrap: wrap;
+}
+
+.filter-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    color: #333;
+}
+
+.filter-checkbox input[type="checkbox"] {
+    cursor: pointer;
+    width: 16px;
+    height: 16px;
+}
+
+.filter-input {
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 13px;
+    transition: border-color 0.2s;
+}
+
+.filter-input:focus {
+    outline: none;
+    border-color: #3C5B6F;
+    box-shadow: 0 0 0 3px rgba(60, 91, 111, 0.1);
+}
+
+/* ===========================
    AVAILABLE PROPOSALS SECTION
    =========================== */
 .available-proposals-section {
@@ -648,6 +712,78 @@
     background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
     color: white;
     border: none;
+    padding: 8px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.btn-approve-all:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(40, 167, 69, 0.3);
+}
+
+.btn-approve-all:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn-reject-all {
+    background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+    color: white;
+    border: none;
+    padding: 8px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.btn-reject-all:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(220, 53, 69, 0.3);
+}
+
+.btn-reject-all:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn-save-tiers {
+    background: #3C5B6F;
+    color: white;
+    border: none;
+    padding: 12px 30px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.btn-save-tiers:hover {
+    background: #153448;
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(60, 91, 111, 0.3);
+}
+
+.btn-confirm-weightage {
+    background: #3C5B6F;
+    color: white;
+    border: none;
     padding: 12px 30px;
     border-radius: 8px;
     cursor: pointer;
@@ -659,14 +795,10 @@
     gap: 8px;
 }
 
-.btn-approve-all:hover:not(:disabled) {
+.btn-confirm-weightage:hover {
+    background: #153448;
     transform: translateY(-2px);
-    box-shadow: 0 5px 15px rgba(40, 167, 69, 0.3);
-}
-
-.btn-approve-all:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+    box-shadow: 0 5px 15px rgba(60, 91, 111, 0.3);
 }
 
 .btn-reset {

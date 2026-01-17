@@ -44,7 +44,7 @@ $proposal_query = "SELECT p.*,
                                                     AND (r.type IS NULL OR r.type = 'Proposal')
                                         )
                                             AND (p.status IS NULL OR p.status = '')
-                                        ORDER BY (p.priority = 'HIGH') DESC, p.created_at ASC";
+                                        ORDER BY COALESCE(pr.is_evaluated, 0) ASC, (p.priority = 'HIGH') DESC, p.created_at ASC";
 // $proposal_query = "SELECT * FROM proposals WHERE id = ?";
 $proposal_stmt = $conn->prepare($proposal_query);
 $proposal_stmt->bind_param("i", $hod_id);
@@ -139,7 +139,7 @@ $department_balance = $balance_data['available_budget'] ?? 0;
                     </div>
                 </div>
                 <div style="text-align: right; margin-top: 20px;">
-                    <button class="btn-approve-all" onclick="confirmWeightage()" style="padding: 8px 20px;">
+                    <button class="btn-confirm-weightage" onclick="confirmWeightage()" style="padding: 8px 20px;">
                         <i class='bx bx-check'></i> Confirm Weightage
                     </button>
                 </div>
@@ -148,15 +148,28 @@ $department_balance = $balance_data['available_budget'] ?? 0;
             <!-- Filter Bar -->
             <div class="proposal-filter-bar">
                 <div class="filter-group">
-                    <label class="filter-label">Filter:</label>
-                    <select id="statusFilter" class="filter-input">
-                        <option value="">All Proposals</option>
-                        <option value="PRIORITIZE">High Priority</option>
-                        <option value="RECOMMEND">Standard</option>
-                    </select>
+                    <label class="filter-label">Filters:</label>
+                    <div class="filter-checkboxes">
+                        <label class="filter-checkbox">
+                            <input type="checkbox" id="filterHighPriority" value="high" onchange="applyFilters()">
+                            <span>High Priority</span>
+                        </label>
+                        <label class="filter-checkbox">
+                            <input type="checkbox" id="filterStandard" value="standard" onchange="applyFilters()">
+                            <span>Standard</span>
+                        </label>
+                        <label class="filter-checkbox">
+                            <input type="checkbox" id="filterEvaluated" value="evaluated" onchange="applyFilters()">
+                            <span>Evaluated</span>
+                        </label>
+                        <label class="filter-checkbox">
+                            <input type="checkbox" id="filterPendingEvaluation" value="PendingEvaluation" onchange="applyFilters()">
+                            <span>Pending Evaluation</span>
+                        </label>
+                    </div>
                 </div>
                 <div class="filter-group">
-                    <input type="text" id="searchFilter" class="filter-input" placeholder="Search by title or researcher...">
+                    <input type="text" id="searchFilter" class="filter-input" placeholder="Search by title/researcher" onkeyup="applyFilters()">
                 </div>
             </div>
 
@@ -209,6 +222,11 @@ $department_balance = $balance_data['available_budget'] ?? 0;
                         <div class="tier-items" id="topTier" data-tier="top" ondrop="allowDrop(event)" ondragover="dragOver(event)" ondragleave="dragLeave(event)">
                             <div class="empty-message">Drag proposals here</div>
                         </div>
+                        <div style="display: flex; justify-content: flex-end; margin-top: 12px;">
+                            <button id="approveAllBtn" class="btn-approve-all" onclick="approveAllTopTier()" disabled>
+                                <i class='bx bx-check-circle'></i> Approve All
+                            </button>
+                        </div>
                     </div>
 
                     <!-- MIDDLE TIER -->
@@ -231,6 +249,11 @@ $department_balance = $balance_data['available_budget'] ?? 0;
                         <div class="tier-items" id="bottomTier" data-tier="bottom" ondrop="allowDrop(event)" ondragover="dragOver(event)" ondragleave="dragLeave(event)">
                             <div class="empty-message">Drag proposals here</div>
                         </div>
+                        <div style="display: flex; justify-content: flex-end; margin-top: 12px;">
+                            <button id="rejectAllBtn" class="btn-reject-all" onclick="rejectAllBottomTier()" disabled>
+                                <i class='bx bx-x-circle'></i> Reject All
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -240,8 +263,8 @@ $department_balance = $balance_data['available_budget'] ?? 0;
                 <button class="btn-reset" onclick="resetTiers()">
                     <i class='bx bx-reset'></i> Reset Tiers
                 </button>
-                <button id="approveAllBtn" class="btn-approve-all" onclick="approveAllTopTier()" disabled>
-                    <i class='bx bx-check-circle'></i> Approve All Top Tier
+                <button class="btn-save-tiers" onclick="saveTierAssignments()">
+                    <i class='bx bx-save'></i> Save
                 </button>
             </div>
         </div>
@@ -376,9 +399,12 @@ $department_balance = $balance_data['available_budget'] ?? 0;
 
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
+            // Restore weightages from localStorage first
+            restoreWeightages();
             // Check if any proposals are already evaluated
             hasEvaluatedProposals = proposalsData.some(p => p.is_evaluated === 1 || p.is_evaluated === '1');
             initializeProposals();
+            // Keep evaluated proposals visible in the review list but also clone them into tiers
             autoDistributeEvaluatedProposals();
             updateBudgetDisplay();
         });
@@ -391,13 +417,50 @@ $department_balance = $balance_data['available_budget'] ?? 0;
 
         // Confirm weightage and show warning if proposals already evaluated
         function confirmWeightage() {
+            // Save weightages to localStorage
+            saveWeightages();
+            
             if (hasEvaluatedProposals) {
                 showAlert('Warning', 'Changing weightage after evaluating proposals will affect the scoring. Previously evaluated proposals will need to be re-distributed based on the new weighted scores.', 'warning');
                 // Recalculate and redistribute
+                refreshProposalScores();
                 autoDistributeEvaluatedProposals();
                 updateBudgetDisplay();
             } else {
                 showAlert('Success', 'Weightage configuration confirmed. The scores will be calculated using these weights as multipliers.', 'success');
+            }
+        }
+
+        // Save weightages to localStorage
+        function saveWeightages() {
+            localStorage.setItem('rubricWeightages', JSON.stringify(rubricWeightages));
+            console.log('Weightages saved:', rubricWeightages);
+        }
+
+        // Restore weightages from localStorage
+        function restoreWeightages() {
+            const stored = localStorage.getItem('rubricWeightages');
+            if (stored) {
+                try {
+                    const saved = JSON.parse(stored);
+                    rubricWeightages = Object.assign({}, rubricWeightages, saved);
+                    // Update UI sliders and display values
+                    Object.keys(rubricWeightages).forEach(aspect => {
+                        const sliderId = 'weight' + aspect.charAt(0).toUpperCase() + aspect.slice(1);
+                        const slider = document.getElementById(sliderId);
+                        if (slider) {
+                            slider.value = rubricWeightages[aspect];
+                            const displayId = sliderId + 'Value';
+                            const display = document.getElementById(displayId);
+                            if (display) {
+                                display.textContent = rubricWeightages[aspect].toFixed(1);
+                            }
+                        }
+                    });
+                    console.log('Weightages restored:', rubricWeightages);
+                } catch (e) {
+                    console.error('Failed to restore weightages:', e);
+                }
             }
         }
 
@@ -410,6 +473,65 @@ $department_balance = $balance_data['available_budget'] ?? 0;
             
             const countText = `${availableItems.length} proposal${availableItems.length !== 1 ? 's' : ''} (${evaluatedCount} evaluated, ${pendingCount} pending)`;
             document.getElementById('proposalCount').textContent = countText;
+        }
+
+        // Apply filters to proposals
+        function applyFilters() {
+            const availableContainer = document.getElementById('availableProposals');
+            const items = availableContainer.querySelectorAll('.tier-item');
+            
+            // Get selected filters
+            const filterHighPriority = document.getElementById('filterHighPriority').checked;
+            const filterStandard = document.getElementById('filterStandard').checked;
+            const filterEvaluated = document.getElementById('filterEvaluated').checked;
+            const filterPendingEvaluation = document.getElementById('filterPendingEvaluation').checked;
+            const searchText = document.getElementById('searchFilter').value.toLowerCase();
+            
+            let visibleCount = 0;
+
+            items.forEach(item => {
+                let shouldShow = true;
+                
+                // Check priority filter
+                const isPriority = item.innerHTML.includes('High Priority');
+                const priorityMatch = !filterHighPriority && !filterStandard || 
+                                     (filterHighPriority && isPriority) || 
+                                     (filterStandard && !isPriority);
+                
+                // Check evaluated status filter
+                const isEvaluated = item.classList.contains('evaluated');
+                const statusMatch = !filterEvaluated && !filterPendingEvaluation ||
+                                   (filterEvaluated && isEvaluated) ||
+                                   (filterPendingEvaluation && !isEvaluated);
+                
+                // Check search text
+                const title = item.querySelector('.tier-item-title')?.textContent.toLowerCase() || '';
+                const researcher = item.querySelector('.tier-item-researcher')?.textContent.toLowerCase() || '';
+                const searchMatch = searchText === '' || title.includes(searchText) || researcher.includes(searchText);
+                
+                // If no filters selected, show all
+                if (!filterHighPriority && !filterStandard && !filterEvaluated && !filterPendingEvaluation) {
+                    shouldShow = searchMatch;
+                } else {
+                    shouldShow = priorityMatch && statusMatch && searchMatch;
+                }
+                
+                item.style.display = shouldShow ? 'flex' : 'none';
+                if (shouldShow) visibleCount++;
+            });
+            
+            // Show/hide empty message
+            const emptyMsg = availableContainer.querySelector('.empty-message');
+            if (visibleCount === 0) {
+                if (!emptyMsg) {
+                    const msg = document.createElement('div');
+                    msg.className = 'empty-message';
+                    msg.textContent = 'No proposals match your filters';
+                    availableContainer.appendChild(msg);
+                }
+            } else {
+                if (emptyMsg) emptyMsg.remove();
+            }
         }
 
         // Auto-distribute evaluated proposals into tiers without removing them from the review list
@@ -459,6 +581,43 @@ $department_balance = $balance_data['available_budget'] ?? 0;
             updateEmptyMessages();
             updateBudgetDisplay();
         }
+        // Refresh score display for all proposals in the available proposals section
+        function refreshProposalScores() {
+            const availableContainer = document.getElementById('availableProposals');
+            const proposalItems = availableContainer.querySelectorAll('.proposal-item');
+            
+            proposalItems.forEach(item => {
+                const proposalId = parseInt(item.dataset.proposalId);
+                const proposal = proposalsData.find(p => p.id === proposalId);
+                
+                if (proposal) {
+                    // Calculate updated score percentage
+                    const maxPossibleScore = 
+                        5 * rubricWeightages.outcome +
+                        5 * rubricWeightages.impact +
+                        5 * rubricWeightages.alignment +
+                        5 * rubricWeightages.funding;
+                    const score = Number(proposal.total_score) || 0;
+                    const scorePercentage = maxPossibleScore > 0 ? ((score / maxPossibleScore) * 100).toFixed(1) : 0;
+                    
+                    // Find and update the score display element
+                    const scoreElement = item.querySelector('[style*="margin-top: 5px; font-weight: 600;"]');
+                    if (scoreElement && (proposal.is_evaluated === 1 || proposal.is_evaluated === '1')) {
+                        scoreElement.innerHTML = `Score: ${scorePercentage}%`;
+                    } else if (proposal.is_evaluated === 1 || proposal.is_evaluated === '1') {
+                        // Add score display if not present but proposal is evaluated
+                        const contentDiv = item.querySelector('.tier-item-content');
+                        if (contentDiv) {
+                            const newScoreElement = document.createElement('div');
+                            newScoreElement.style.cssText = 'font-size: 12px; color: #3C5B6F; margin-top: 5px; font-weight: 600;';
+                            newScoreElement.innerHTML = `Score: ${scorePercentage}%`;
+                            contentDiv.appendChild(newScoreElement);
+                        }
+                    }
+                }
+            });
+        }
+
         function initializeProposals() {
             const availableContainer = document.getElementById('availableProposals');
             const topTier = document.getElementById('topTier');
@@ -514,9 +673,21 @@ $department_balance = $balance_data['available_budget'] ?? 0;
             div.dataset.budget = proposal.budget_requested || 0;
             div.setAttribute('draggable', true);
 
-            const priorityBadge = proposal.status === 'PRIORITIZE'
+            const priorityBadge = (proposal.priority && proposal.priority.toUpperCase() === 'HIGH')
                 ? '<span class="priority-badge high">High Priority</span>'
                 : '<span class="priority-badge low">Standard</span>';
+
+            // Calculate score percentage
+            const maxPossibleScore = 
+                5 * rubricWeightages.outcome +
+                5 * rubricWeightages.impact +
+                5 * rubricWeightages.alignment +
+                5 * rubricWeightages.funding;
+            const score = Number(proposal.total_score) || 0;
+            const scorePercentage = maxPossibleScore > 0 ? ((score / maxPossibleScore) * 100).toFixed(1) : 0;
+            const scoreDisplay = proposal.is_evaluated === 1 || proposal.is_evaluated === '1' 
+                ? `<div style="font-size: 12px; color: #3C5B6F; margin-top: 5px; font-weight: 600;">Score: ${scorePercentage}%</div>`
+                : '';
 
             div.innerHTML = `
                 <div class="tier-item-content">
@@ -525,6 +696,7 @@ $department_balance = $balance_data['available_budget'] ?? 0;
                     <div style="font-size: 12px; color: #999; margin-top: 5px;">
                         Requested: RM${parseFloat(proposal.budget_requested || 0).toFixed(2)}
                     </div>
+                    ${scoreDisplay}
                 </div>
                 <div class="tier-item-actions">
                     <button class="tier-item-btn" onclick="openRubricModal(${proposal.id})" title="Evaluate & Set Budget">
@@ -550,6 +722,18 @@ $department_balance = $balance_data['available_budget'] ?? 0;
             div.dataset.budget = proposal.budget_requested || 0;
             div.setAttribute('draggable', true);
 
+            // Calculate score percentage
+            const maxPossibleScore = 
+                5 * rubricWeightages.outcome +
+                5 * rubricWeightages.impact +
+                5 * rubricWeightages.alignment +
+                5 * rubricWeightages.funding;
+            const score = Number(proposal.total_score) || 0;
+            const scorePercentage = maxPossibleScore > 0 ? ((score / maxPossibleScore) * 100).toFixed(1) : 0;
+            const scoreDisplay = proposal.is_evaluated === 1 || proposal.is_evaluated === '1' 
+                ? `<div style="font-size: 12px; color: #3C5B6F; margin-top: 5px; font-weight: 600;">Score: ${scorePercentage}%</div>`
+                : '';
+
             div.innerHTML = `
                 <div class="tier-item-content">
                     <div class="tier-item-title">${escapeHtml(proposal.title)}</div>
@@ -557,6 +741,12 @@ $department_balance = $balance_data['available_budget'] ?? 0;
                     <div style="font-size: 12px; color: #999; margin-top: 5px;">
                         Requested: RM${parseFloat(proposal.budget_requested || 0).toFixed(2)}
                     </div>
+                    ${scoreDisplay}
+                </div>
+                <div class="tier-item-actions">
+                    <button class="tier-item-btn" onclick="openRubricModal(${proposal.id})" title="Edit & Update Budget">
+                        <i class='bx bx-edit'></i> Edit
+                    </button>
                 </div>
             `;
 
@@ -774,6 +964,7 @@ $department_balance = $balance_data['available_budget'] ?? 0;
 
                     showAlert('Success', 'Rubric saved successfully!', 'success');
                     closeRubricModal();
+                    refreshProposalScores();
                     autoDistributeEvaluatedProposals();
                     updateBudgetDisplay();
                     updateProposalCount();
@@ -850,6 +1041,8 @@ $department_balance = $balance_data['available_budget'] ?? 0;
             // Show warning if exceeds budget
             const warningBox = document.getElementById('budgetWarning');
             const approveBtn = document.getElementById('approveAllBtn');
+            const rejectBtn = document.getElementById('rejectAllBtn');
+            const bottomTier = document.getElementById('bottomTier');
 
             if (topTierTotal > deptBalance) {
                 warningBox.style.display = 'block';
@@ -858,14 +1051,22 @@ $department_balance = $balance_data['available_budget'] ?? 0;
                 warningBox.style.display = 'none';
                 approveBtn.disabled = topTier.querySelectorAll('.tier-item').length === 0;
             }
+
+            // Enable/disable reject button based on bottom tier proposals
+            rejectBtn.disabled = bottomTier.querySelectorAll('.tier-item').length === 0;
         }
 
         // Action Functions
         function resetTiers() {
+            // Clear all tier sections
             ['topTier', 'middleTier', 'bottomTier'].forEach(tierId => {
                 document.getElementById(tierId).innerHTML = '<div class="empty-message">Drag proposals here</div>';
             });
             tierAssignments = {};
+            budgetAdjustments = {};
+            
+            // Restore initial system-generated tier distribution for evaluated proposals
+            autoDistributeEvaluatedProposals();
             updateBudgetDisplay();
         }
 
@@ -915,6 +1116,88 @@ $department_balance = $balance_data['available_budget'] ?? 0;
             .catch(error => {
                 console.error('Error:', error);
                 showAlert('Error', 'An error occurred while approving proposals', 'error');
+            });
+        }
+
+        function saveTierAssignments() {
+            const topTier = document.getElementById('topTier');
+            const middleTier = document.getElementById('middleTier');
+            const bottomTier = document.getElementById('bottomTier');
+
+            const assignments = {};
+            
+            // Collect top tier proposals
+            topTier.querySelectorAll('.tier-item').forEach(item => {
+                const proposalId = parseInt(item.dataset.proposalId);
+                assignments[proposalId] = 'top';
+            });
+
+            // Collect middle tier proposals
+            middleTier.querySelectorAll('.tier-item').forEach(item => {
+                const proposalId = parseInt(item.dataset.proposalId);
+                assignments[proposalId] = 'middle';
+            });
+
+            // Collect bottom tier proposals
+            bottomTier.querySelectorAll('.tier-item').forEach(item => {
+                const proposalId = parseInt(item.dataset.proposalId);
+                assignments[proposalId] = 'bottom';
+            });
+
+            const formData = new FormData();
+            formData.append('action', 'save_tier_assignments');
+            formData.append('assignments', JSON.stringify(assignments));
+
+            fetch('hod_proposal_handler.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showAlert('Success', 'Tier assignments saved successfully!', 'success');
+                } else {
+                    showAlert('Error', data.message || 'Failed to save tier assignments', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showAlert('Error', 'An error occurred while saving tier assignments', 'error');
+            });
+        }
+
+        function rejectAllBottomTier() {
+            const bottomTier = document.getElementById('bottomTier');
+            const items = bottomTier.querySelectorAll('.tier-item');
+
+            if (items.length === 0) {
+                showAlert('No Proposals', 'Please add proposals to the bottom tier first.', 'warning');
+                return;
+            }
+
+            // Prepare data for submission
+            const proposalIds = Array.from(items).map(item => item.dataset.proposalId).join(',');
+            
+            const formData = new FormData();
+            formData.append('action', 'reject_bottom_tier');
+            formData.append('proposal_ids', proposalIds);
+
+            fetch('hod_proposal_handler.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showAlert('Success', `${items.length} proposals rejected successfully!`, 'success');
+                    setTimeout(() => location.reload(), 2000);
+                } else {
+                    showAlert('Error', data.message || 'Failed to reject proposals', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showAlert('Error', 'An error occurred while rejecting proposals', 'error');
             });
         }
 

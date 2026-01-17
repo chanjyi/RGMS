@@ -85,7 +85,7 @@ if ($action === 'approve_top_tier') {
             $update_stmt->execute();
 
             // Create or update grant record if not exists
-            $grant_query = "SELECT grantId FROM grant WHERE proposalId = ?";
+            $grant_query = "SELECT fund_id FROM fund WHERE proposal_id = ?";
             $grant_stmt = $conn->prepare($grant_query);
             $grant_stmt->bind_param("i", $pid);
             $grant_stmt->execute();
@@ -96,7 +96,7 @@ if ($action === 'approve_top_tier') {
                 $grant_number = 'GRT-' . date('Y') . '-' . str_pad($pid, 5, '0', STR_PAD_LEFT);
 
                 // Create grant record
-                $grant_insert = "INSERT INTO grant (proposalId, grantNumber, amountAllocated, amountSpent, amountRemaining, status)
+                $grant_insert = "INSERT INTO fund (proposal_id, grant_number, amount_allocated, amount_spent, amount_remaining, status)
                                  VALUES (?, ?, ?, 0, ?, 'Active')";
                 $grant_insert_stmt = $conn->prepare($grant_insert);
                 $grant_insert_stmt->bind_param("isdd", $pid, $grant_number, $approved_budget, $approved_budget);
@@ -104,10 +104,10 @@ if ($action === 'approve_top_tier') {
                 $grant_id = $conn->insert_id;
             } else {
                 $grant = $grant_result->fetch_assoc();
-                $grant_id = $grant['grantId'];
+                $grant_id = $grant['fund_id'];
 
                 // Update grant amount
-                $grant_update = "UPDATE grant SET amountAllocated = ?, amountRemaining = ? WHERE grantId = ?";
+                $grant_update = "UPDATE fund SET amount_allocated = ?, amount_remaining = ? WHERE fund_id = ?";
                 $grant_update_stmt = $conn->prepare($grant_update);
                 $grant_update_stmt->bind_param("ddi", $approved_budget, $approved_budget, $grant_id);
                 $grant_update_stmt->execute();
@@ -115,18 +115,18 @@ if ($action === 'approve_top_tier') {
 
             // Create grant allocation record
             $today = date('Y-m-d');
-            $alloc_insert = "INSERT INTO grant_allocation (grantId, requestedBudget, approvedBudget, approvedBy, approvalDate)
+            $alloc_insert = "INSERT INTO grant_allocation (fund_id, requested_budget, approved_budget, approved_by, approval_date)
                              VALUES (?, ?, ?, ?, ?)";
             $alloc_stmt = $conn->prepare($alloc_insert);
             $alloc_stmt->bind_param("iddis", $grant_id, $approved_budget, $approved_budget, $hod_id, $today);
             $alloc_stmt->execute();
 
             // Update tier assignment
-            $tier_insert = "INSERT INTO hod_tier_assignment (proposalId, hod_id, tier, approved_budget, is_approved)
+            $tier_insert = "INSERT INTO hod_tier_assignment (proposal_id, hod_id, tier, approved_budget, is_approved)
                             VALUES (?, ?, 'top', ?, 1)
                             ON DUPLICATE KEY UPDATE tier = 'top', approved_budget = ?, is_approved = 1";
             $tier_stmt = $conn->prepare($tier_insert);
-            $tier_stmt->bind_param("iddd", $pid, $hod_id, $approved_budget, $approved_budget);
+            $tier_stmt->bind_param("iidd", $pid, $hod_id, $approved_budget, $approved_budget);
             $tier_stmt->execute();
 
             // Send notification to researcher
@@ -203,30 +203,38 @@ elseif ($action === 'save_rubric') {
 
         $total_score = $outcome + $impact + $alignment + $funding;
 
-        // Try to update existing rubric first
-        $rubric_update = "UPDATE proposal_rubric 
-                          SET outcome_score = ?, impact_score = ?, alignment_score = ?, funding_score = ?, total_score = ?, hod_notes = ?, is_evaluated = 1
-                          WHERE proposal_id = ? AND hod_id = ?";
-        
-        $update_stmt = $conn->prepare($rubric_update);
-        if (!$update_stmt) {
-            echo json_encode(['success' => false, 'message' => 'Error preparing update: ' . $conn->error]);
-            exit();
-        }
+        // Check if rubric record exists first
+        $check_query = "SELECT proposal_id FROM proposal_rubric WHERE proposal_id = ? AND hod_id = ?";
+        $check_stmt = $conn->prepare($check_query);
+        $check_stmt->bind_param("ii", $proposal_id, $hod_id);
+        $check_stmt->execute();
+        $check_result = $check_stmt->get_result();
+        $rubric_exists = $check_result->num_rows > 0;
 
-        $update_stmt->bind_param(
-            "iiiiisii",
-            $outcome, $impact, $alignment, $funding, $total_score, $hod_notes,
-            $proposal_id, $hod_id
-        );
-        
-        if (!$update_stmt->execute()) {
-            echo json_encode(['success' => false, 'message' => 'Error executing update: ' . $update_stmt->error]);
-            exit();
-        }
+        if ($rubric_exists) {
+            // Update existing rubric record
+            $rubric_update = "UPDATE proposal_rubric 
+                              SET outcome_score = ?, impact_score = ?, alignment_score = ?, funding_score = ?, total_score = ?, hod_notes = ?, is_evaluated = 1
+                              WHERE proposal_id = ? AND hod_id = ?";
+            
+            $update_stmt = $conn->prepare($rubric_update);
+            if (!$update_stmt) {
+                echo json_encode(['success' => false, 'message' => 'Error preparing update: ' . $conn->error]);
+                exit();
+            }
 
-        // If no rows were updated, insert a new rubric record
-        if ($update_stmt->affected_rows === 0) {
+            $update_stmt->bind_param(
+                "iiiiisii",
+                $outcome, $impact, $alignment, $funding, $total_score, $hod_notes,
+                $proposal_id, $hod_id
+            );
+            
+            if (!$update_stmt->execute()) {
+                echo json_encode(['success' => false, 'message' => 'Error executing update: ' . $update_stmt->error]);
+                exit();
+            }
+        } else {
+            // Insert new rubric record
             $rubric_insert = "INSERT INTO proposal_rubric 
                               (proposal_id, hod_id, outcome_score, impact_score, alignment_score, funding_score, total_score, hod_notes, is_evaluated)
                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)";
@@ -294,6 +302,88 @@ else {
             echo json_encode(['success' => true, 'rubric' => $rubric, 'approved_budget' => $approved_budget]);
         } catch (Exception $e) {
             echo json_encode(['success' => false, 'message' => 'Error: ' . $e->getMessage()]);
+        }
+    } elseif ($action === 'save_tier_assignments') {
+        try {
+            $assignments = json_decode($_POST['assignments'] ?? '{}', true);
+
+            if (empty($assignments)) {
+                echo json_encode(['success' => false, 'message' => 'No tier assignments provided']);
+                exit();
+            }
+
+            foreach ($assignments as $proposal_id => $tier) {
+                $proposal_id = intval($proposal_id);
+                
+                // Insert or update tier assignment
+                $tier_insert = "INSERT INTO hod_tier_assignment (proposal_id, hod_id, tier)
+                                VALUES (?, ?, ?)
+                                ON DUPLICATE KEY UPDATE tier = ?";
+                $tier_stmt = $conn->prepare($tier_insert);
+                $tier_stmt->bind_param("isis", $proposal_id, $hod_id, $tier, $tier);
+                $tier_stmt->execute();
+            }
+
+            echo json_encode(['success' => true, 'message' => 'Tier assignments saved successfully']);
+
+        } catch (Exception $e) {
+            echo json_encode(['success' => false, 'message' => 'Error: ' . $e->getMessage()]);
+        }
+    } elseif ($action === 'reject_bottom_tier') {
+        try {
+            $conn->begin_transaction();
+
+            $proposal_ids = explode(',', $_POST['proposal_ids'] ?? '');
+
+            foreach ($proposal_ids as $pid) {
+                $pid = intval($pid);
+
+                // Get proposal details
+                $prop_query = "SELECT * FROM proposals WHERE id = ?";
+                $prop_stmt = $conn->prepare($prop_query);
+                $prop_stmt->bind_param("i", $pid);
+                $prop_stmt->execute();
+                $prop_result = $prop_stmt->get_result();
+                $proposal = $prop_result->fetch_assoc();
+
+                if (!$proposal) continue;
+
+                // Update proposal status to REJECTED and set approved_budget to 0
+                $update_query = "UPDATE proposals SET status = 'REJECTED', approved_budget = 0 WHERE id = ?";
+                $update_stmt = $conn->prepare($update_query);
+                $update_stmt->bind_param("i", $pid);
+                $update_stmt->execute();
+
+                // Update tier assignment as rejected
+                $tier_insert = "INSERT INTO hod_tier_assignment (proposal_id, hod_id, tier, is_approved)
+                                VALUES (?, ?, 'bottom', 0)
+                                ON DUPLICATE KEY UPDATE tier = 'bottom', is_approved = 0";
+                $tier_stmt = $conn->prepare($tier_insert);
+                $tier_stmt->bind_param("ii", $pid, $hod_id);
+                $tier_stmt->execute();
+
+                // Send notification to researcher
+                $researcher_email = $proposal['researcher_email'];
+                $notif_msg = "Final Decision: Your proposal '" . $proposal['title'] . "' has been REJECTED by the Head of Department.";
+                $notif_insert = "INSERT INTO notifications (user_email, message, type) VALUES (?, ?, 'warning')";
+                $notif_stmt = $conn->prepare($notif_insert);
+                $notif_stmt->bind_param("ss", $researcher_email, $notif_msg);
+                $notif_stmt->execute();
+            }
+
+            $conn->commit();
+
+            echo json_encode([
+                'success' => true,
+                'message' => count($proposal_ids) . ' proposals rejected successfully'
+            ]);
+
+        } catch (Exception $e) {
+            $conn->rollback();
+            echo json_encode([
+                'success' => false,
+                'message' => 'Error: ' . $e->getMessage()
+            ]);
         }
     } else {
         echo json_encode(['success' => false, 'message' => 'Invalid action']);
