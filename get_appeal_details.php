@@ -30,6 +30,7 @@ $detail_sql = "
         p.researcher_email,
         p.file_path,
         p.created_at,
+        p.budget_requested,
         ar.id AS appeal_id,
         ar.justification,
         ar.submitted_at,
@@ -66,6 +67,8 @@ $history_stmt->execute();
 $rev_history = $history_stmt->get_result();
 ?>
 
+<span class="rubric-close" onclick="closeAppealModal()">&times;</span>
+
 <div class="rubric-header">
     <div>
         <h2 class="rubric-title"><?= htmlspecialchars($row['title']) ?></h2>
@@ -81,7 +84,7 @@ $rev_history = $history_stmt->get_result();
     <div class="proposal-panel">
         <div class="proposal-meta">
             <div><strong>Researcher:</strong> <?= htmlspecialchars($row['researcher_email']) ?></div>
-            <div><strong>Appeal Date:</strong> <?= date('M d, Y', strtotime($row['submitted_at'])) ?></div>
+            <div><strong>Requested Budget:</strong> RM<?= number_format((float)($row['budget_requested'] ?? 0), 2) ?></div>
         </div>
         <div class="proposal-viewer">
             <iframe src="<?= htmlspecialchars($row['file_path']) ?>" class="appeal-proposal-iframe"></iframe>
@@ -105,7 +108,7 @@ $rev_history = $history_stmt->get_result();
                 <?php while ($rev = $rev_history->fetch_assoc()): ?>
                     <div class="evaluation-block">
                         <div class="eval-label">Reviewer Decision (<?= htmlspecialchars($rev['review_type']) ?>)</div>
-                        <p class="eval-meta">By <?= htmlspecialchars($rev['reviewer_name'] ?? 'Reviewer') ?> • <?= htmlspecialchars($rev['decision'] ?? 'N/A') ?> • <?= $rev['review_date'] ? date('M d, Y', strtotime($rev['review_date'])) : 'Date N/A' ?></p>
+                        <p class="eval-meta">By <?= htmlspecialchars($rev['reviewer_name'] ?? 'Reviewer') ?> • <?= htmlspecialchars($rev['decision'] ?? 'N/A') ?></p>
                         <?php if (!empty($rev['feedback'])): ?>
                             <p class="eval-text"><?= nl2br(htmlspecialchars($rev['feedback'])) ?></p>
                         <?php else: ?>
@@ -140,30 +143,9 @@ $rev_history = $history_stmt->get_result();
 
 <div class="appeal-actions">
     <button type="button" class="btn-approve" onclick="submitAppealDecision(<?= (int)$row['proposal_id'] ?>, <?= (int)$row['appeal_id'] ?>, 'approve')">
-        <i class='bx bx-check-circle'></i> Approve Appeal & Reassign
+        <i class='bx bx-check-circle'></i> Approve Appeal
     </button>
     <button type="button" class="btn-reject" onclick="submitAppealDecision(<?= (int)$row['proposal_id'] ?>, <?= (int)$row['appeal_id'] ?>, 'reject')">
         <i class='bx bx-block'></i> Uphold Rejection
     </button>
 </div>
-
-<script>
-function submitAppealDecision(proposalId, appealId, action) {
-    const formData = new FormData();
-    formData.append('proposal_id', proposalId);
-    formData.append('appeal_id', appealId);
-    formData.append('appeal_action', action);
-
-    fetch('hod_appeal_cases.php', {
-        method: 'POST',
-        body: formData
-    })
-    .then(r => r.text())
-    .then(() => {
-        location.reload();
-    })
-    .catch(e => {
-        alert('Error: ' + e);
-    });
-}
-</script>

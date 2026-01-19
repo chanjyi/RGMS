@@ -193,9 +193,13 @@ $history_stmt = $conn->prepare(
                             <div class="appeal-budget">
                                 Requested: RM<?= number_format((float)($row['budget_requested'] ?? 0), 2) ?>
                             </div>
+                            <div class="appeal-justification">
+                                <strong>Justification:</strong> <?= htmlspecialchars(substr($row['justification'], 0, 100)) ?><?= strlen($row['justification']) > 100 ? '...' : '' ?>
+                            </div>
+
                         </div>
                         <div class="tier-item-actions">
-                            <button class="tier-item-btn" onclick="openAppealModal(<?= (int)$row['proposal_id'] ?>, <?= (int)$row['appeal_id'] ?>)" title="Review Appeal">
+                            <button type="button" class="tier-item-btn" onclick="openAppealModal(<?= (int)$row['proposal_id'] ?>, <?= (int)$row['appeal_id'] ?>)" title="Review Appeal">
                                 <i class='bx bx-search-alt'></i> Review
                             </button>
                         </div>
@@ -206,12 +210,50 @@ $history_stmt = $conn->prepare(
             <!-- Appeal Details Modal -->
             <div id="appealModal" class="rubric-modal">
                 <div class="rubric-content rubric-split">
-                    <span class="rubric-close" onclick="closeAppealModal()">&times;</span>
                     <div id="appealModalBody"></div>
                 </div>
             </div>
 
             <script>
+            function submitAppealDecision(proposalId, appealId, action) {
+                console.log('Submit appeal decision called:', proposalId, appealId, action);
+                
+                if (!proposalId || !appealId || !action) {
+                    console.error('Missing parameters:', { proposalId, appealId, action });
+                    alert('Error: Missing required parameters');
+                    return;
+                }
+                
+                if (!confirm('Are you sure you want to ' + (action === 'approve' ? 'APPROVE this appeal' : 'UPHOLD the rejection') + '?')) {
+                    return;
+                }
+                
+                const formData = new FormData();
+                formData.append('proposal_id', proposalId);
+                formData.append('appeal_id', appealId);
+                formData.append('appeal_action', action);
+                
+                console.log('Sending request to hod_appeal_cases.php');
+
+                fetch('hod_appeal_cases.php', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(r => {
+                    console.log('Response received:', r.status, r.statusText);
+                    return r.text();
+                })
+                .then(html => {
+                    console.log('Response HTML length:', html.length);
+                    // Reload the page to show updated state
+                    window.location.href = 'hod_appeal_cases.php';
+                })
+                .catch(e => {
+                    console.error('Fetch error:', e);
+                    alert('Error processing appeal decision: ' + e.message);
+                });
+            }
+
             function openAppealModal(proposalId, appealId) {
                 console.log('Opening appeal modal for proposal:', proposalId, 'appeal:', appealId);
                 const modal = document.getElementById('appealModal');
