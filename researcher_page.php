@@ -12,7 +12,7 @@ $message = "";
 $messageType = ""; 
 $email = $_SESSION['email'];
 
-// Helper: Notify System Users
+// Helper: Notify System
 function notifySystem($conn, $role, $msg) {
     $q = $conn->prepare("SELECT email FROM users WHERE role = ?");
     $q->bind_param("s", $role);
@@ -26,12 +26,20 @@ function notifySystem($conn, $role, $msg) {
 }
 
 // =========================================================
-// USE CASE 7: SUBMIT AND TRACK PROPOSALS
+// USE CASE 7: SUBMIT PROPOSAL WITH BUDGET BREAKDOWN
 // =========================================================
 if (isset($_POST['submit_proposal'])) {
     $title = mysqli_real_escape_string($conn, $_POST['title']);
     $description = mysqli_real_escape_string($conn, $_POST['description']);
+    $duration_months = intval($_POST['duration_months']);
     $budget_requested = floatval($_POST['budget_requested']);
+    
+    // Budget breakdown by category
+    $budget_equipment = floatval($_POST['budget_equipment'] ?? 0);
+    $budget_materials = floatval($_POST['budget_materials'] ?? 0);
+    $budget_travel = floatval($_POST['budget_travel'] ?? 0);
+    $budget_personnel = floatval($_POST['budget_personnel'] ?? 0);
+    $budget_other = floatval($_POST['budget_other'] ?? 0);
     
     $target_dir = "uploads/";
     if (!is_dir($target_dir)) mkdir($target_dir, 0777, true);
@@ -43,32 +51,57 @@ if (isset($_POST['submit_proposal'])) {
     $target_file = $target_dir . $new_file_name;
 
     if ($file_type != "pdf") {
-        $message = "Error: Only PDF files are allowed."; 
+        $message = "Error: Only PDF allowed."; 
         $messageType = "error";
     } else {
         if (move_uploaded_file($_FILES["proposal_file"]["tmp_name"], $target_file)) {
-            $stmt = $conn->prepare("INSERT INTO proposals (title, description, researcher_email, file_path, budget_requested, status) VALUES (?, ?, ?, ?, ?, 'SUBMITTED')");
-            $stmt->bind_param("ssssd", $title, $description, $email, $target_file, $budget_requested);
+            // Insert proposal
+            $stmt = $conn->prepare("INSERT INTO proposals (title, description, researcher_email, file_path, budget_requested, duration_months, status) VALUES (?, ?, ?, ?, ?, ?, 'SUBMITTED')");
+            $stmt->bind_param("ssssdi", $title, $description, $email, $target_file, $budget_requested, $duration_months);
+            
             if ($stmt->execute()) {
+                $proposal_id = $conn->insert_id;
+                
+                // Insert budget breakdown into budget_items table
+                $categories = [
+                    'Equipment' => $budget_equipment,
+                    'Materials' => $budget_materials,
+                    'Travel' => $budget_travel,
+                    'Personnel' => $budget_personnel,
+                    'Other' => $budget_other
+                ];
+                
+                foreach ($categories as $category => $amount) {
+                    if ($amount > 0) {
+                        $budget_stmt = $conn->prepare("INSERT INTO budget_items (proposal_id, category, allocated_amount, description) VALUES (?, ?, ?, ?)");
+                        $desc = "$category budget";
+                        $budget_stmt->bind_param("isds", $proposal_id, $category, $amount, $desc);
+                        $budget_stmt->execute();
+                    }
+                }
+                
+                // Create initial document version
+                $version_stmt = $conn->prepare("INSERT INTO document_versions (proposal_id, version_number, file_path, uploaded_by) VALUES (?, 'v1.0', ?, ?)");
+                $version_stmt->bind_param("iss", $proposal_id, $target_file, $email);
+                $version_stmt->execute();
+                
                 notifySystem($conn, 'admin', "New Proposal Submitted: '$title' by $email");
-                $message = "Proposal submitted successfully! You can track its status in the table below."; 
+                $message = "Proposal submitted successfully with budget breakdown!"; 
                 $messageType = "success";
             } else {
-                $message = "Database Error: " . $conn->error; 
+                $message = "DB Error: " . $conn->error; 
                 $messageType = "error";
             }
-        } else {
-            $message = "Error uploading file."; 
-            $messageType = "error";
         }
     }
 }
 
-// DELETE DRAFT PROPOSAL (Part of Use Case 7)
+// =========================================================
+// DELETE DRAFT PROPOSAL (USE CASE 7)
+// =========================================================
 if (isset($_POST['delete_proposal'])) {
     $prop_id = intval($_POST['proposal_id']);
     
-    // Only allow deletion of DRAFT or SUBMITTED proposals (not yet processed)
     $check = $conn->prepare("SELECT status, file_path FROM proposals WHERE id = ? AND researcher_email = ?");
     $check->bind_param("is", $prop_id, $email);
     $check->execute();
@@ -81,7 +114,7 @@ if (isset($_POST['delete_proposal'])) {
             if (file_exists($prop['file_path'])) {
                 unlink($prop['file_path']);
             }
-            // Delete from database
+            // Delete from database (CASCADE will handle related records)
             $delete = $conn->prepare("DELETE FROM proposals WHERE id = ?");
             $delete->bind_param("i", $prop_id);
             if ($delete->execute()) {
@@ -113,21 +146,26 @@ if (isset($_POST['amend_proposal'])) {
         $messageType = "error";
     } else {
         if (move_uploaded_file($_FILES["amend_file"]["tmp_name"], $target_file)) {
-            // Update proposal with new file and status
+            // Get current version number and increment
+            $version_query = $conn->prepare("SELECT MAX(CAST(SUBSTRING(version_number, 2) AS DECIMAL(10,2))) as max_ver FROM document_versions WHERE proposal_id = ?");
+            $version_query->bind_param("i", $prop_id);
+            $version_query->execute();
+            $ver_result = $version_query->get_result()->fetch_assoc();
+            $new_version = "v" . number_format($ver_result['max_ver'] + 0.1, 1);
+            
+            // Insert new version
+            $version_stmt = $conn->prepare("INSERT INTO document_versions (proposal_id, version_number, file_path, uploaded_by, change_notes) VALUES (?, ?, ?, ?, ?)");
+            $version_stmt->bind_param("issss", $prop_id, $new_version, $target_file, $email, $amendment_notes);
+            $version_stmt->execute();
+            
+            // Update proposal
             $stmt = $conn->prepare("UPDATE proposals SET file_path = ?, status = 'RESUBMITTED', amendment_notes = ?, resubmitted_at = NOW() WHERE id = ? AND researcher_email = ?");
             $stmt->bind_param("ssis", $target_file, $amendment_notes, $prop_id, $email);
             
             if ($stmt->execute()) {
-                $reset_rev = $conn->prepare("UPDATE reviews SET status = 'Pending', decision = NULL, review_date = NULL WHERE proposal_id = ?");
-                $reset_rev->bind_param("i", $prop_id);
-                $reset_rev->execute();
-                // Notify the original reviewer
-                notifySystem($conn, 'reviewer', "Proposal #$prop_id has been amended and resubmitted by $email. Please verify corrections.");
-                $message = "Amendment submitted successfully! The reviewer will be notified."; 
+                notifySystem($conn, 'reviewer', "Proposal #$prop_id has been amended and resubmitted by $email (Version $new_version). Please verify corrections.");
+                $message = "Amendment submitted successfully! Version: $new_version"; 
                 $messageType = "success";
-            } else {
-                $message = "Error submitting amendment."; 
-                $messageType = "error";
             }
         }
     }
@@ -185,13 +223,14 @@ if (isset($_POST['submit_report'])) {
     $achievements = mysqli_real_escape_string($conn, $_POST['achievements']);
     $challenges = mysqli_real_escape_string($conn, $_POST['challenges']);
     $deadline = $_POST['report_deadline'];
+    $milestone_ids = $_POST['milestones'] ?? []; // Array of completed milestone IDs
     
     $target_dir = "uploads/reports/";
     if (!is_dir($target_dir)) mkdir($target_dir, 0777, true);
     
     $file_name = basename($_FILES["report_file"]["name"]);
     $file_type = strtolower(pathinfo($file_name, PATHINFO_EXTENSION));
-    $new_file_name = "rep_" . time() . "_" . $grant_id . "." . $file_type;
+    $new_file_name = "rep_" . time() . "_" . $grant_id . ".pdf";
     $target_file = $target_dir . $new_file_name;
 
     if ($file_type != "pdf") {
@@ -211,6 +250,13 @@ if (isset($_POST['submit_report'])) {
             $stmt->bind_param("issssss", $grant_id, $email, $rep_title, $achievements, $challenges, $target_file, $deadline);
             
             if ($stmt->execute()) {
+                // Mark selected milestones as completed
+                foreach ($milestone_ids as $milestone_id) {
+                    $mile_update = $conn->prepare("UPDATE milestones SET status = 'COMPLETED', completion_date = CURDATE() WHERE id = ? AND grant_id = ?");
+                    $mile_update->bind_param("ii", $milestone_id, $grant_id);
+                    $mile_update->execute();
+                }
+                
                 // Forward to HOD for monitoring
                 notifySystem($conn, 'hod', "New Progress Report submitted by $email for Grant #$grant_id: '$rep_title'");
                 $message = "Progress Report uploaded successfully and forwarded to Head of Department for review."; 
@@ -252,16 +298,62 @@ if (isset($_POST['request_extension'])) {
 }
 
 // =========================================================
-// USE CASE 9: VIEW GRANT ALLOCATION & BUDGET USAGE
+// LOG EXPENDITURE (USE CASE 9 ENHANCEMENT)
 // =========================================================
-// This is handled in the display section below with real-time tracking
+if (isset($_POST['log_expenditure'])) {
+    $budget_item_id = intval($_POST['budget_item_id']);
+    $amount = floatval($_POST['expenditure_amount']);
+    $trans_date = $_POST['transaction_date'];
+    $exp_description = mysqli_real_escape_string($conn, $_POST['expenditure_description']);
+    
+    // Handle receipt upload
+    $receipt_path = null;
+    if (isset($_FILES['receipt_file']) && $_FILES['receipt_file']['size'] > 0) {
+        $receipt_dir = "uploads/receipts/";
+        if (!is_dir($receipt_dir)) mkdir($receipt_dir, 0777, true);
+        
+        $receipt_name = "receipt_" . time() . "_" . basename($_FILES["receipt_file"]["name"]);
+        $receipt_path = $receipt_dir . $receipt_name;
+        move_uploaded_file($_FILES["receipt_file"]["tmp_name"], $receipt_path);
+    }
+    
+    // Insert expenditure
+    $stmt = $conn->prepare("INSERT INTO expenditures (budget_item_id, amount, transaction_date, description, receipt_path) VALUES (?, ?, ?, ?, ?)");
+    $stmt->bind_param("idsss", $budget_item_id, $amount, $trans_date, $exp_description, $receipt_path);
+    
+    if ($stmt->execute()) {
+        // Update spent amount in budget_items
+        $update = $conn->prepare("UPDATE budget_items SET spent_amount = spent_amount + ? WHERE id = ?");
+        $update->bind_param("di", $amount, $budget_item_id);
+        $update->execute();
+        
+        // Update total spent in proposals
+        $prop_update = $conn->prepare("
+            UPDATE proposals p
+            SET amount_spent = (
+                SELECT SUM(spent_amount) 
+                FROM budget_items 
+                WHERE proposal_id = (SELECT proposal_id FROM budget_items WHERE id = ?)
+            )
+            WHERE id = (SELECT proposal_id FROM budget_items WHERE id = ?)
+        ");
+        $prop_update->bind_param("ii", $budget_item_id, $budget_item_id);
+        $prop_update->execute();
+        
+        $message = "Expenditure logged successfully!"; 
+        $messageType = "success";
+    } else {
+        $message = "Error logging expenditure."; 
+        $messageType = "error";
+    }
+}
 
 // =========================================================
 // DATA FETCHING FOR DASHBOARD
 // =========================================================
 
 // Fetch all proposals with review details
-$sql_props = "SELECT p.*, r.decision as reviewer_decision, r.feedback, r.reviewer_email
+$sql_props = "SELECT p.*, r.decision as reviewer_decision, r.feedback 
               FROM proposals p 
               LEFT JOIN reviews r ON p.id = r.proposal_id 
               WHERE p.researcher_email = ? 
@@ -279,7 +371,7 @@ $stmt->execute();
 $my_grants = $stmt->get_result();
 
 // Fetch progress reports
-$sql_reports = "SELECT pr.*, p.title as grant_title, p.id as grant_id
+$sql_reports = "SELECT pr.*, p.title as grant_title 
                 FROM progress_reports pr 
                 JOIN proposals p ON pr.proposal_id = p.id 
                 WHERE pr.researcher_email = ?
@@ -289,17 +381,10 @@ $stmt->bind_param("s", $email);
 $stmt->execute();
 $my_reports = $stmt->get_result();
 
-// Fetch extension requests
-$sql_ext = "SELECT er.*, pr.title as report_title 
-            FROM extension_requests er 
-            JOIN progress_reports pr ON er.report_id = pr.id 
-            WHERE er.researcher_email = ?
-            ORDER BY er.requested_at DESC";
-$stmt = $conn->prepare($sql_ext);
-$stmt->bind_param("s", $email);
-$stmt->execute();
-$my_extensions = $stmt->get_result();
+// NOW CONTINUE TO PART 2 FOR THE HTML/FRONTEND...
 ?>
+
+<!-- CONTINUE FROM PART 1 - THIS IS THE HTML/FRONTEND SECTION -->
 
 <!DOCTYPE html>
 <html lang="en">
@@ -316,62 +401,44 @@ $my_extensions = $stmt->get_result();
         .tab-content.active { display: block; }
         
         .modal { display: none; position: fixed; z-index: 999; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); overflow-y: auto; }
-        .modal-content { background: white; margin: 5% auto; padding: 30px; width: 60%; max-width: 700px; border-radius: 10px; box-shadow: 0 5px 20px rgba(0,0,0,0.3); }
+        .modal-content { background: white; margin: 3% auto; padding: 30px; width: 70%; max-width: 900px; border-radius: 10px; box-shadow: 0 5px 20px rgba(0,0,0,0.3); }
         .close { float: right; font-size: 32px; cursor: pointer; color: #999; line-height: 20px; }
         .close:hover { color: #333; }
         
-        .budget-card { 
-            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); 
-            padding: 20px; 
-            margin-bottom: 15px; 
-            border-left: 5px solid #28a745; 
-            border-radius: 8px; 
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1); 
-        }
-        .budget-bar { 
-            width: 100%; 
-            height: 25px; 
-            background: #e9ecef; 
-            border-radius: 15px; 
-            overflow: hidden; 
-            margin: 10px 0; 
-            position: relative; 
-        }
-        .budget-fill { 
-            height: 100%; 
-            background: linear-gradient(90deg, #28a745, #20c997); 
-            transition: width 0.3s; 
-            display: flex; 
-            align-items: center; 
-            justify-content: center; 
-            color: white; 
-            font-weight: bold; 
-            font-size: 12px; 
-        }
+        .budget-card { background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); padding: 20px; margin-bottom: 15px; border-left: 5px solid #28a745; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .budget-bar { width: 100%; height: 25px; background: #e9ecef; border-radius: 15px; overflow: hidden; margin: 10px 0; position: relative; }
+        .budget-fill { height: 100%; background: linear-gradient(90deg, #28a745, #20c997); transition: width 0.3s; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 12px; }
         .budget-warning { background: linear-gradient(90deg, #ffc107, #ff9800); }
         .budget-danger { background: linear-gradient(90deg, #dc3545, #c82333); }
+        
+        .budget-breakdown { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin: 15px 0; }
+        .budget-item { background: white; padding: 15px; border-radius: 8px; border-left: 3px solid #3C5B6F; }
         
         textarea { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 5px; resize: vertical; font-family: inherit; }
         .input-group { margin-bottom: 15px; }
         .input-group label { display: block; margin-bottom: 5px; font-weight: 600; color: #333; }
-        .input-group input, .input-group textarea { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; }
+        .input-group input, .input-group textarea, .input-group select { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; }
         
-        .status-badge { 
-            padding: 5px 12px; 
-            border-radius: 20px; 
-            font-size: 12px; 
-            font-weight: bold; 
-            text-transform: uppercase; 
-        }
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; }
+        
+        .milestone-list { background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 10px 0; }
+        .milestone-item { padding: 10px; background: white; margin: 5px 0; border-radius: 5px; border-left: 3px solid #17a2b8; }
+        .milestone-item.completed { border-left-color: #28a745; opacity: 0.7; }
+        
+        .expenditure-table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        .expenditure-table th, .expenditure-table td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }
+        .expenditure-table th { background: #f8f9fa; font-weight: 600; }
+        
+        .status-badge { padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: bold; text-transform: uppercase; }
         .status-badge.submitted { background: #cce5ff; color: #004085; }
-        .status-badge.under_review { background: #fff3cd; color: #856404; }
         .status-badge.approved { background: #d4edda; color: #155724; }
         .status-badge.rejected { background: #f8d7da; color: #721c24; }
         .status-badge.requires_amendment { background: #ffeeba; color: #856404; }
         .status-badge.resubmitted { background: #d1ecf1; color: #0c5460; }
         .status-badge.appealed { background: #e2e3e5; color: #383d41; }
+        .status-badge.pending_review { background: #fff3cd; color: #856404; }
         
-        .form-box { background: #f8f9fa; padding: 25px; border-radius: 8px; margin-bottom: 25px; }
         .btn-action { padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; transition: 0.3s; }
         .btn-edit { background: #17a2b8; color: white; }
         .btn-delete { background: #dc3545; color: white; }
@@ -412,9 +479,9 @@ $my_extensions = $stmt->get_result();
             </button>
         </div>
 
-        <!-- USE CASE 7: SUBMIT AND TRACK PROPOSALS -->
+        <!-- ========== TAB 1: PROPOSALS ========== -->
         <div id="proposals" class="tab-content active">
-            <div class="form-box">
+            <div class="form-box" style="margin-bottom: 30px; background:#f8f9fa; padding:25px; border-radius:8px;">
                 <h3 style="margin-top:0; color:#3C5B6F;">
                     <i class='bx bx-plus-circle'></i> Submit New Proposal
                 </h3>
@@ -427,11 +494,44 @@ $my_extensions = $stmt->get_result();
                         <label>Description *</label>
                         <textarea name="description" rows="4" required placeholder="Provide a brief overview of your research proposal"></textarea>
                     </div>
-                    <div class="input-group">
-                        <label>Budget Requested ($) *</label>
-                        <input type="number" name="budget_requested" step="0.01" min="0" required placeholder="0.00">
+                    <div class="grid-2">
+                        <div class="input-group">
+                            <label>Project Duration (Months) *</label>
+                            <input type="number" name="duration_months" min="1" max="60" required placeholder="12">
+                        </div>
+                        <div class="input-group">
+                            <label>Total Budget Requested ($) *</label>
+                            <input type="number" name="budget_requested" step="0.01" min="0" required placeholder="0.00" id="totalBudget" readonly>
+                        </div>
                     </div>
-                    <div class="input-group">
+                    
+                    <h4 style="color:#3C5B6F; margin-top:20px;">Budget Breakdown by Category</h4>
+                    <div class="grid-3">
+                        <div class="input-group">
+                            <label>Equipment ($)</label>
+                            <input type="number" name="budget_equipment" step="0.01" min="0" value="0" class="budget-category" onchange="calculateTotal()">
+                        </div>
+                        <div class="input-group">
+                            <label>Materials ($)</label>
+                            <input type="number" name="budget_materials" step="0.01" min="0" value="0" class="budget-category" onchange="calculateTotal()">
+                        </div>
+                        <div class="input-group">
+                            <label>Travel ($)</label>
+                            <input type="number" name="budget_travel" step="0.01" min="0" value="0" class="budget-category" onchange="calculateTotal()">
+                        </div>
+                    </div>
+                    <div class="grid-2">
+                        <div class="input-group">
+                            <label>Personnel ($)</label>
+                            <input type="number" name="budget_personnel" step="0.01" min="0" value="0" class="budget-category" onchange="calculateTotal()">
+                        </div>
+                        <div class="input-group">
+                            <label>Other Expenses ($)</label>
+                            <input type="number" name="budget_other" step="0.01" min="0" value="0" class="budget-category" onchange="calculateTotal()">
+                        </div>
+                    </div>
+                    
+                    <div class="input-group" style="margin-top:20px;">
                         <label>Proposal Document (PDF) *</label>
                         <input type="file" name="proposal_file" accept=".pdf" required>
                     </div>
@@ -450,6 +550,7 @@ $my_extensions = $stmt->get_result();
                         <th>ID</th>
                         <th>Title</th>
                         <th>Status</th>
+                        <th>Budget Requested</th>
                         <th>Reviewer Feedback</th>
                         <th>Submitted</th>
                         <th>Actions</th>
@@ -459,12 +560,18 @@ $my_extensions = $stmt->get_result();
                     <?php while($row = $my_props->fetch_assoc()): ?>
                         <tr>
                             <td><?= $row['id'] ?></td>
-                            <td style="max-width:250px;"><?= htmlspecialchars($row['title']) ?></td>
+                            <td style="max-width:250px;">
+                                <strong><?= htmlspecialchars($row['title']) ?></strong>
+                                <?php if($row['duration_months']): ?>
+                                    <br><small style="color:#666;"><?= $row['duration_months'] ?> months</small>
+                                <?php endif; ?>
+                            </td>
                             <td>
                                 <span class="status-badge <?= strtolower($row['status']) ?>">
                                     <?= str_replace('_', ' ', $row['status']) ?>
                                 </span>
                             </td>
+                            <td>$<?= number_format($row['budget_requested'], 2) ?></td>
                             <td style="font-size:12px; color:#555; max-width:200px;">
                                 <?php if(!empty($row['feedback'])): ?>
                                     <?= htmlspecialchars(substr($row['feedback'], 0, 100)) ?>
@@ -491,12 +598,9 @@ $my_extensions = $stmt->get_result();
                                     </span>
                                 
                                 <?php elseif(in_array($row['status'], ['DRAFT', 'SUBMITTED'])): ?>
-                                    <form method="POST" style="display:inline;" onsubmit="return confirm('Are you sure you want to delete this proposal?');">
-                                        <input type="hidden" name="proposal_id" value="<?= $row['id'] ?>">
-                                        <button type="submit" name="delete_proposal" class="btn-action btn-delete">
-                                            <i class='bx bx-trash'></i> Delete
-                                        </button>
-                                    </form>
+                                    <button onclick="confirmDelete(<?= $row['id'] ?>, '<?= htmlspecialchars($row['title']) ?>')" class="btn-action btn-delete">
+                                        <i class='bx bx-trash'></i> Delete
+                                    </button>
                                 
                                 <?php else: ?>
                                     <span style="color:#999;">-</span>
@@ -508,12 +612,12 @@ $my_extensions = $stmt->get_result();
             </table>
         </div>
 
-        <!-- USE CASE 9: VIEW GRANT ALLOCATION & BUDGET USAGE -->
+        <!-- ========== TAB 2: GRANTS & BUDGET ========== -->
         <div id="grants" class="tab-content">
             <h3 style="color:#3C5B6F; margin-top:0;">
                 <i class='bx bx-wallet'></i> Active Grants - Financial Overview
             </h3>
-            <p style="color:#666; margin-bottom:20px;">Real-time tracking of allocated funds and expenditure for all approved projects.</p>
+            <p style="color:#666; margin-bottom:20px;">Real-time tracking of allocated funds and expenditure.</p>
             
             <?php if ($my_grants->num_rows > 0): ?>
                 <?php while($grant = $my_grants->fetch_assoc()): 
@@ -530,7 +634,9 @@ $my_extensions = $stmt->get_result();
                         <h4 style="margin-top:0; color:#2c3e50;">
                             <i class='bx bx-file-blank'></i> <?= htmlspecialchars($grant['title']) ?>
                         </h4>
-                        <p style="color:#666; font-size:13px; margin:5px 0;">Grant ID: #<?= $grant['id'] ?> | Approved: <?= date('M d, Y', strtotime($grant['approved_at'])) ?></p>
+                        <p style="color:#666; font-size:13px; margin:5px 0;">
+                            Grant ID: #<?= $grant['id'] ?> | Approved: <?= date('M d, Y', strtotime($grant['approved_at'])) ?>
+                        </p>
                         
                         <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:15px; margin:15px 0;">
                             <div>
@@ -553,20 +659,101 @@ $my_extensions = $stmt->get_result();
                             </div>
                         </div>
                         
-                        <button onclick="openReportModal(<?= $grant['id'] ?>)" class="btn-save" style="margin-top:15px;">
-                            <i class='bx bx-plus'></i> Submit Progress Report
-                        </button>
+                        <!-- BUDGET BREAKDOWN BY CATEGORY -->
+                        <h5 style="margin-top:20px; color:#3C5B6F;">Budget Breakdown</h5>
+                        <div class="budget-breakdown">
+                            <?php
+                            $budget_query = $conn->prepare("SELECT * FROM budget_items WHERE proposal_id = ?");
+                            $budget_query->bind_param("i", $grant['id']);
+                            $budget_query->execute();
+                            $budget_items = $budget_query->get_result();
+                            
+                            while($item = $budget_items->fetch_assoc()):
+                                $item_percentage = $item['allocated_amount'] > 0 ? ($item['spent_amount'] / $item['allocated_amount']) * 100 : 0;
+                            ?>
+                                <div class="budget-item">
+                                    <strong><?= $item['category'] ?></strong><br>
+                                    <small style="color:#666;">
+                                        $<?= number_format($item['spent_amount'], 2) ?> / $<?= number_format($item['allocated_amount'], 2) ?>
+                                    </small><br>
+                                    <div style="background:#e9ecef; height:8px; border-radius:5px; margin-top:5px; overflow:hidden;">
+                                        <div style="background:#3C5B6F; height:100%; width:<?= min($item_percentage, 100) ?>%;"></div>
+                                    </div>
+                                    <button onclick="openExpenditureModal(<?= $item['id'] ?>, '<?= $item['category'] ?>')" 
+                                            style="margin-top:8px; padding:5px 10px; background:#17a2b8; color:white; border:none; border-radius:4px; cursor:pointer; font-size:12px;">
+                                        <i class='bx bx-plus'></i> Log Expense
+                                    </button>
+                                </div>
+                            <?php endwhile; ?>
+                        </div>
+                        
+                        <!-- EXPENDITURE HISTORY -->
+                        <h5 style="margin-top:20px; color:#3C5B6F;">Recent Expenditures</h5>
+                        <?php
+                        $exp_query = $conn->prepare("
+                            SELECT e.*, b.category 
+                            FROM expenditures e 
+                            JOIN budget_items b ON e.budget_item_id = b.id 
+                            WHERE b.proposal_id = ? 
+                            ORDER BY e.transaction_date DESC 
+                            LIMIT 5
+                        ");
+                        $exp_query->bind_param("i", $grant['id']);
+                        $exp_query->execute();
+                        $expenditures = $exp_query->get_result();
+                        ?>
+                        
+                        <?php if($expenditures->num_rows > 0): ?>
+                            <table class="expenditure-table">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Category</th>
+                                        <th>Description</th>
+                                        <th>Amount</th>
+                                        <th>Receipt</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php while($exp = $expenditures->fetch_assoc()): ?>
+                                        <tr>
+                                            <td><?= date('M d, Y', strtotime($exp['transaction_date'])) ?></td>
+                                            <td><?= $exp['category'] ?></td>
+                                            <td><?= htmlspecialchars(substr($exp['description'], 0, 50)) ?></td>
+                                            <td><strong>$<?= number_format($exp['amount'], 2) ?></strong></td>
+                                            <td>
+                                                <?php if($exp['receipt_path']): ?>
+                                                    <a href="<?= $exp['receipt_path'] ?>" target="_blank" style="color:#3C5B6F;">
+                                                        <i class='bx bx-receipt'></i> View
+                                                    </a>
+                                                <?php else: ?>
+                                                    <span style="color:#999;">No receipt</span>
+                                                <?php endif; ?>
+                                            </td>
+                                        </tr>
+                                    <?php endwhile; ?>
+                                </tbody>
+                            </table>
+                        <?php else: ?>
+                            <p style="color:#999; font-style:italic; text-align:center; padding:20px;">No expenditures logged yet.</p>
+                        <?php endif; ?>
+                        
+                        <div style="margin-top:20px; text-align:right;">
+                            <button onclick="openReportModal(<?= $grant['id'] ?>)" class="btn-save">
+                                <i class='bx bx-plus'></i> Submit Progress Report
+                            </button>
+                        </div>
                     </div>
                 <?php endwhile; ?>
             <?php else: ?>
                 <div style="text-align:center; padding:40px; color:#999;">
                     <i class='bx bx-info-circle' style="font-size:48px;"></i>
-                    <p>No active grants at the moment. Submit a proposal to get started!</p>
+                    <p>No active grants. Submit a proposal to get started!</p>
                 </div>
             <?php endif; ?>
         </div>
 
-        <!-- USE CASE 8 & 12: PROGRESS REPORTS AND EXTENSIONS -->
+        <!-- ========== TAB 3: PROGRESS REPORTS ========== -->
         <div id="reports" class="tab-content">
             <h3 style="color:#3C5B6F; margin-top:0;">
                 <i class='bx bx-bar-chart-alt-2'></i> My Progress Reports
@@ -575,18 +762,17 @@ $my_extensions = $stmt->get_result();
             <table class="styled-table">
                 <thead>
                     <tr>
-                        <th>Report ID</th>
+                        <th>ID</th>
                         <th>Grant</th>
-                        <th>Report Title</th>
+                        <th>Title</th>
                         <th>Deadline</th>
                         <th>Status</th>
-                        <th>Submitted</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                     <?php 
-                    $my_reports->data_seek(0); // Reset pointer
+                    $my_reports->data_seek(0);
                     if($my_reports->num_rows > 0):
                         while($rep = $my_reports->fetch_assoc()): 
                             $is_overdue = strtotime($rep['deadline']) < strtotime(date('Y-m-d')) && $rep['status'] == 'PENDING_REVIEW';
@@ -606,15 +792,14 @@ $my_extensions = $stmt->get_result();
                                     <?= str_replace('_', ' ', $rep['status']) ?>
                                 </span>
                             </td>
-                            <td style="font-size:12px;"><?= date('M d, Y', strtotime($rep['submitted_at'])) ?></td>
                             <td>
-                                <button onclick="openExtModal(<?= $rep['id'] ?>)" class="btn-action" style="background:#f39c12; color:white;">
+                                <button onclick="openExtModal(<?= $rep['id'] ?>, '<?= date('Y-m-d', strtotime($rep['deadline'])) ?>')" class="btn-action" style="background:#f39c12; color:white;">
                                     <i class='bx bx-time'></i> Request Extension
                                 </button>
                             </td>
                         </tr>
                     <?php endwhile; else: ?>
-                        <tr><td colspan="7" style="text-align:center; color:#999;">No reports submitted yet.</td></tr>
+                        <tr><td colspan="6" style="text-align:center; color:#999;">No reports submitted yet.</td></tr>
                     <?php endif; ?>
                 </tbody>
             </table>
@@ -626,31 +811,34 @@ $my_extensions = $stmt->get_result();
                 <thead>
                     <tr>
                         <th>Report</th>
-                        <th>Current Deadline</th>
+                        <th>Original Deadline</th>
                         <th>Requested Deadline</th>
-                        <th>Justification</th>
                         <th>Status</th>
-                        <th>Requested</th>
                     </tr>
                 </thead>
                 <tbody>
-                    <?php if($my_extensions->num_rows > 0): 
-                        while($ext = $my_extensions->fetch_assoc()): ?>
+                    <?php
+                    $ext_query = $conn->prepare("
+                        SELECT er.*, pr.title as report_title, pr.deadline as original_deadline
+                        FROM extension_requests er 
+                        JOIN progress_reports pr ON er.report_id = pr.id 
+                        WHERE er.researcher_email = ?
+                        ORDER BY er.requested_at DESC
+                    ");
+                    $ext_query->bind_param("s", $email);
+                    $ext_query->execute();
+                    $extensions = $ext_query->get_result();
+                    
+                    if($extensions->num_rows > 0): 
+                        while($ext = $extensions->fetch_assoc()): ?>
                         <tr>
                             <td><?= htmlspecialchars($ext['report_title']) ?></td>
-                            <td style="font-size:12px;">
-                                <?php
-                                $report_check = $conn->prepare("SELECT deadline FROM progress_reports WHERE id = ?");
-                                $report_check->bind_param("i", $ext['report_id']);
-                                $report_check->execute();
-                                $report_data = $report_check->get_result()->fetch_assoc();
-                                echo date('M d, Y', strtotime($report_data['deadline']));
-                                ?>
+                            <td style="font-size:12px; color:#dc3545;">
+                                <?= date('M d, Y', strtotime($ext['original_deadline'])) ?>
                             </td>
                             <td style="font-size:12px; font-weight:bold; color:#28a745;">
                                 <?= date('M d, Y', strtotime($ext['new_deadline'])) ?>
                             </td>
-                            <td style="font-size:12px; max-width:200px;"><?= htmlspecialchars(substr($ext['justification'], 0, 80)) ?>...</td>
                             <td>
                                 <?php if($ext['status'] == 'APPROVED'): ?>
                                     <span style="color:#28a745; font-weight:bold;"><i class='bx bx-check-circle'></i> Approved</span>
@@ -660,17 +848,42 @@ $my_extensions = $stmt->get_result();
                                     <span style="color:#ffc107; font-weight:bold;"><i class='bx bx-time'></i> Pending</span>
                                 <?php endif; ?>
                             </td>
-                            <td style="font-size:12px;"><?= date('M d, Y', strtotime($ext['requested_at'])) ?></td>
                         </tr>
                     <?php endwhile; else: ?>
-                        <tr><td colspan="6" style="text-align:center; color:#999;">No extension requests.</td></tr>
+                        <tr><td colspan="4" style="text-align:center; color:#999;">No extension requests.</td></tr>
                     <?php endif; ?>
                 </tbody>
             </table>
         </div>
     </section>
 
-    <!-- MODAL: APPEAL PROPOSAL (USE CASE 10) -->
+<!-- CONTINUE TO PART 3 FOR MODALS AND JAVASCRIPT... -->
+
+<!-- CONTINUE FROM PART 2 - THIS IS THE MODALS & JAVASCRIPT SECTION -->
+
+    <!-- MODAL: DELETE CONFIRMATION -->
+    <div id="deleteModal" class="modal">
+        <div class="modal-content" style="width:40%; max-width:500px;">
+            <span class="close" onclick="closeModal('deleteModal')">&times;</span>
+            <h3 style="color:#dc3545; margin-top:0;">
+                <i class='bx bx-trash'></i> Confirm Deletion
+            </h3>
+            <p style="font-size:14px; color:#666;">Are you sure you want to delete this proposal?</p>
+            <p style="font-weight:bold; color:#333;" id="deleteProposalName"></p>
+            <p style="font-size:13px; color:#dc3545;">This action cannot be undone!</p>
+            <form method="POST" id="deleteForm">
+                <input type="hidden" name="proposal_id" id="delete_prop_id">
+                <button type="submit" name="delete_proposal" class="btn-action btn-delete" style="padding:10px 20px;">
+                    <i class='bx bx-trash'></i> Yes, Delete
+                </button>
+                <button type="button" onclick="closeModal('deleteModal')" style="background:#6c757d; color:white; border:none; padding:10px 20px; border-radius:5px; cursor:pointer; margin-left:10px;">
+                    Cancel
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: APPEAL PROPOSAL -->
     <div id="appealModal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeModal('appealModal')">&times;</span>
@@ -678,15 +891,13 @@ $my_extensions = $stmt->get_result();
                 <i class='bx bx-error-alt'></i> Appeal Proposal Rejection
             </h3>
             <p style="font-size:14px; color:#666; line-height:1.6;">
-                Use this form to formally contest the rejection of your proposal. Provide a detailed rebuttal 
-                explaining why the review decision was factually incorrect or unfair. Your appeal will be 
-                reviewed by the Head of Department.
+                Provide a detailed rebuttal explaining why the review decision was factually incorrect.
             </p>
             <form method="POST">
                 <input type="hidden" name="proposal_id" id="appeal_prop_id">
                 <div class="input-group">
                     <label>Detailed Justification / Rebuttal *</label>
-                    <textarea name="justification" rows="6" required placeholder="Explain in detail why this proposal should be reconsidered. Include specific factual corrections or evidence that the review was incorrect..."></textarea>
+                    <textarea name="justification" rows="6" required placeholder="Explain why this proposal should be reconsidered..."></textarea>
                 </div>
                 <button type="submit" name="appeal_proposal" class="btn-save" style="background:#e74c3c;">
                     <i class='bx bx-send'></i> Submit Appeal
@@ -698,22 +909,21 @@ $my_extensions = $stmt->get_result();
         </div>
     </div>
 
-    <!-- MODAL: AMEND PROPOSAL (USE CASE 11) -->
+    <!-- MODAL: AMEND PROPOSAL -->
     <div id="amendModal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeModal('amendModal')">&times;</span>
             <h3 style="color:#17a2b8; margin-top:0;">
                 <i class='bx bx-edit-alt'></i> Submit Amendment
             </h3>
-            <p style="font-size:14px; color:#666; line-height:1.6;">
-                Upload your corrected proposal document addressing the reviewer's feedback. 
-                The original reviewer will be notified to verify your corrections.
+            <p style="font-size:14px; color:#666;">
+                Upload your corrected proposal document. System will track this as a new version.
             </p>
             <form method="POST" enctype="multipart/form-data">
                 <input type="hidden" name="proposal_id" id="amend_prop_id">
                 <div class="input-group">
                     <label>Amendment Notes</label>
-                    <textarea name="amendment_notes" rows="3" placeholder="Briefly describe the changes you made..."></textarea>
+                    <textarea name="amendment_notes" rows="3" placeholder="Describe the changes you made..."></textarea>
                 </div>
                 <div class="input-group">
                     <label>Upload Revised PDF Document *</label>
@@ -729,16 +939,13 @@ $my_extensions = $stmt->get_result();
         </div>
     </div>
 
-    <!-- MODAL: SUBMIT PROGRESS REPORT (USE CASE 8) -->
+    <!-- MODAL: SUBMIT PROGRESS REPORT -->
     <div id="reportModal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeModal('reportModal')">&times;</span>
             <h3 style="color:#3C5B6F; margin-top:0;">
                 <i class='bx bx-file-plus'></i> Submit Progress Report
             </h3>
-            <p style="font-size:14px; color:#666; line-height:1.6;">
-                Report on your project's milestones, achievements, and challenges. Include evidence of completed work.
-            </p>
             <form method="POST" enctype="multipart/form-data">
                 <input type="hidden" name="grant_id" id="report_grant_id">
                 <div class="input-group">
@@ -751,8 +958,17 @@ $my_extensions = $stmt->get_result();
                 </div>
                 <div class="input-group">
                     <label>Challenges Faced</label>
-                    <textarea name="challenges" rows="3" placeholder="Describe any obstacles or issues encountered..."></textarea>
+                    <textarea name="challenges" rows="3" placeholder="Describe any obstacles encountered..."></textarea>
                 </div>
+                
+                <!-- MILESTONE TRACKING -->
+                <div class="input-group">
+                    <label>Mark Completed Milestones</label>
+                    <div class="milestone-list" id="milestone_container">
+                        <p style="color:#999; font-style:italic;">Loading milestones...</p>
+                    </div>
+                </div>
+                
                 <div class="input-group">
                     <label>Report Deadline *</label>
                     <input type="date" name="report_deadline" required>
@@ -760,7 +976,6 @@ $my_extensions = $stmt->get_result();
                 <div class="input-group">
                     <label>Evidence of Work (PDF) *</label>
                     <input type="file" name="report_file" accept=".pdf" required>
-                    <small style="color:#666;">Upload documentation, data, or other evidence supporting your report</small>
                 </div>
                 <button type="submit" name="submit_report" class="btn-save">
                     <i class='bx bx-upload'></i> Submit Report
@@ -772,26 +987,63 @@ $my_extensions = $stmt->get_result();
         </div>
     </div>
 
-    <!-- MODAL: REQUEST DEADLINE EXTENSION (USE CASE 12) -->
+    <!-- MODAL: LOG EXPENDITURE -->
+    <div id="expenditureModal" class="modal">
+        <div class="modal-content" style="width:50%; max-width:600px;">
+            <span class="close" onclick="closeModal('expenditureModal')">&times;</span>
+            <h3 style="color:#17a2b8; margin-top:0;">
+                <i class='bx bx-receipt'></i> Log Expenditure
+            </h3>
+            <p style="color:#666; font-size:14px;">Category: <strong id="exp_category_name"></strong></p>
+            <form method="POST" enctype="multipart/form-data">
+                <input type="hidden" name="budget_item_id" id="exp_budget_item_id">
+                <div class="input-group">
+                    <label>Amount Spent ($) *</label>
+                    <input type="number" name="expenditure_amount" step="0.01" min="0.01" required placeholder="0.00">
+                </div>
+                <div class="input-group">
+                    <label>Transaction Date *</label>
+                    <input type="date" name="transaction_date" required value="<?= date('Y-m-d') ?>">
+                </div>
+                <div class="input-group">
+                    <label>Description *</label>
+                    <textarea name="expenditure_description" rows="3" required placeholder="What was purchased/paid for?"></textarea>
+                </div>
+                <div class="input-group">
+                    <label>Upload Receipt (Optional)</label>
+                    <input type="file" name="receipt_file" accept=".pdf,.jpg,.jpeg,.png">
+                    <small style="color:#666;">Accepted: PDF, JPG, PNG</small>
+                </div>
+                <button type="submit" name="log_expenditure" class="btn-save">
+                    <i class='bx bx-save'></i> Log Expenditure
+                </button>
+                <button type="button" onclick="closeModal('expenditureModal')" style="background:#6c757d; color:white; border:none; padding:10px 20px; border-radius:5px; cursor:pointer; margin-left:10px;">
+                    Cancel
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: REQUEST DEADLINE EXTENSION -->
     <div id="extModal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeModal('extModal')">&times;</span>
             <h3 style="color:#f39c12; margin-top:0;">
                 <i class='bx bx-time-five'></i> Request Deadline Extension
             </h3>
-            <p style="font-size:14px; color:#666; line-height:1.6;">
-                Request additional time to submit your progress report. Provide a valid justification for the delay.
+            <p style="color:#666; font-size:14px;">
+                Original Deadline: <strong style="color:#dc3545;" id="original_deadline_display"></strong>
             </p>
             <form method="POST">
                 <input type="hidden" name="report_id" id="ext_report_id">
                 <div class="input-group">
                     <label>New Target Deadline *</label>
-                    <input type="date" name="new_date" required min="<?= date('Y-m-d', strtotime('+1 day')) ?>">
+                    <input type="date" name="new_date" id="new_deadline_input" required min="<?= date('Y-m-d', strtotime('+1 day')) ?>">
                     <small style="color:#666;">Must be a future date</small>
                 </div>
                 <div class="input-group">
                     <label>Justification for Extension *</label>
-                    <textarea name="justification" rows="4" required placeholder="e.g., Fieldwork delayed due to weather conditions, Equipment malfunction, etc."></textarea>
+                    <textarea name="justification" rows="4" required placeholder="e.g., Fieldwork delayed due to weather, Equipment malfunction, etc."></textarea>
                 </div>
                 <button type="submit" name="request_extension" class="btn-save" style="background:#f39c12;">
                     <i class='bx bx-send'></i> Submit Extension Request
@@ -804,7 +1056,7 @@ $my_extensions = $stmt->get_result();
     </div>
 
     <script>
-        // Tab switching functionality
+        // ========== TAB SWITCHING ==========
         function openTab(evt, tabName) {
             var tabcontent = document.getElementsByClassName("tab-content");
             for (var i = 0; i < tabcontent.length; i++) {
@@ -818,32 +1070,95 @@ $my_extensions = $stmt->get_result();
             evt.currentTarget.className += " active";
         }
 
-        // Modal functions
+        // ========== BUDGET CALCULATION ==========
+        function calculateTotal() {
+            var categories = document.getElementsByClassName('budget-category');
+            var total = 0;
+            for (var i = 0; i < categories.length; i++) {
+                total += parseFloat(categories[i].value) || 0;
+            }
+            document.getElementById('totalBudget').value = total.toFixed(2);
+        }
+
+        // ========== DELETE CONFIRMATION ==========
+        function confirmDelete(propId, propTitle) {
+            document.getElementById('deleteModal').style.display = "block";
+            document.getElementById('delete_prop_id').value = propId;
+            document.getElementById('deleteProposalName').textContent = propTitle;
+        }
+
+        // ========== AMEND MODAL ==========
         function openAmendModal(propId) {
             document.getElementById('amendModal').style.display = "block";
             document.getElementById('amend_prop_id').value = propId;
         }
 
+        // ========== APPEAL MODAL ==========
         function openAppealModal(propId) {
             document.getElementById('appealModal').style.display = "block";
             document.getElementById('appeal_prop_id').value = propId;
         }
 
+        // ========== PROGRESS REPORT MODAL WITH MILESTONE LOADING ==========
         function openReportModal(grantId) {
             document.getElementById('reportModal').style.display = "block";
             document.getElementById('report_grant_id').value = grantId;
+            
+            // Load milestones for this grant via AJAX
+            fetch('get_milestones.php?grant_id=' + grantId)
+                .then(response => response.json())
+                .then(data => {
+                    var container = document.getElementById('milestone_container');
+                    if (data.length > 0) {
+                        var html = '';
+                        data.forEach(function(milestone) {
+                            var completedClass = milestone.status === 'COMPLETED' ? 'completed' : '';
+                            var checked = milestone.status === 'COMPLETED' ? 'checked disabled' : '';
+                            html += '<div class="milestone-item ' + completedClass + '">';
+                            html += '<label style="cursor:pointer;"><input type="checkbox" name="milestones[]" value="' + milestone.id + '" ' + checked + '> ';
+                            html += milestone.title + ' <small style="color:#666;">(' + milestone.status + ')</small></label>';
+                            html += '</div>';
+                        });
+                        container.innerHTML = html;
+                    } else {
+                        container.innerHTML = '<p style="color:#999; font-style:italic;">No milestones defined for this grant.</p>';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading milestones:', error);
+                    document.getElementById('milestone_container').innerHTML = '<p style="color:#dc3545;">Error loading milestones.</p>';
+                });
         }
 
-        function openExtModal(reportId) {
+        // ========== EXPENDITURE MODAL ==========
+        function openExpenditureModal(budgetItemId, categoryName) {
+            document.getElementById('expenditureModal').style.display = "block";
+            document.getElementById('exp_budget_item_id').value = budgetItemId;
+            document.getElementById('exp_category_name').textContent = categoryName;
+        }
+
+        // ========== EXTENSION MODAL ==========
+        function openExtModal(reportId, originalDeadline) {
             document.getElementById('extModal').style.display = "block";
             document.getElementById('ext_report_id').value = reportId;
+            
+            // Format and display original deadline
+            var date = new Date(originalDeadline);
+            var formattedDate = date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+            document.getElementById('original_deadline_display').textContent = formattedDate;
+            
+            // Set minimum date for new deadline (day after original)
+            var minDate = new Date(date.getTime() + 86400000);
+            var minDateString = minDate.toISOString().split('T')[0];
+            document.getElementById('new_deadline_input').min = minDateString;
         }
 
-        function closeModal(modalId) {
-            document.getElementById(modalId).style.display = "none";
+        // ========== CLOSE MODAL ==========
+        function closeModal(id) { 
+            document.getElementById(id).style.display = "none"; 
         }
 
-        // Close modal when clicking outside
+        // ========== CLOSE MODAL WHEN CLICKING OUTSIDE ==========
         window.onclick = function(event) {
             var modals = document.getElementsByClassName('modal');
             for(var i = 0; i < modals.length; i++) {
