@@ -85,7 +85,7 @@ if (isset($_POST['final_decision'])) {
 <head>
     <meta charset="UTF-8">
     <title>HOD Approval</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="styling/style.css">
 </head>
 <body>
     <?php include 'sidebar.php'; ?>
