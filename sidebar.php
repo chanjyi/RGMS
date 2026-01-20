@@ -55,6 +55,14 @@ if (isset($_SESSION['email']) && isset($conn)) {
         </li>
 
         <li>
+            <a href="researcher_analytics.php" class="<?= basename($_SERVER['PHP_SELF']) == 'researcher_analytics.php' ? 'active' : '' ?>">
+                <i class='bx bx-bar-chart-alt-2'></i>
+                <span class="links_name">Analytics</span>
+            </a>
+            <span class="tooltip">Analytics</span>
+         </li>
+
+        <li>
             <a href="profile.php" class="<?= $current == 'profile.php' ? 'active' : '' ?>">
                 <i class='bx bx-user'></i>
                 <span class="links_name">Profile</span>

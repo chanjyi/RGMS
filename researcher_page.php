@@ -26,7 +26,7 @@ function notifySystem($conn, $role, $msg) {
 }
 
 // =========================================================
-// USE CASE 7: SUBMIT PROPOSAL WITH BUDGET BREAKDOWN
+// USE CASE 7: SUBMIT PROPOSAL WITH BUDGET BREAKDOWN & MILESTONES
 // =========================================================
 if (isset($_POST['submit_proposal'])) {
     $title = mysqli_real_escape_string($conn, $_POST['title']);
@@ -40,6 +40,11 @@ if (isset($_POST['submit_proposal'])) {
     $budget_travel = floatval($_POST['budget_travel'] ?? 0);
     $budget_personnel = floatval($_POST['budget_personnel'] ?? 0);
     $budget_other = floatval($_POST['budget_other'] ?? 0);
+    
+    // Milestones
+    $milestone_titles = $_POST['milestone_title'] ?? [];
+    $milestone_descs = $_POST['milestone_desc'] ?? [];
+    $milestone_dates = $_POST['milestone_date'] ?? [];
     
     $target_dir = "uploads/";
     if (!is_dir($target_dir)) mkdir($target_dir, 0777, true);
@@ -80,13 +85,22 @@ if (isset($_POST['submit_proposal'])) {
                     }
                 }
                 
+                // Insert milestones
+                for ($i = 0; $i < count($milestone_titles); $i++) {
+                    if (!empty($milestone_titles[$i]) && !empty($milestone_dates[$i])) {
+                        $m_stmt = $conn->prepare("INSERT INTO milestones (grant_id, title, description, target_date, status) VALUES (?, ?, ?, ?, 'PENDING')");
+                        $m_stmt->bind_param("isss", $proposal_id, $milestone_titles[$i], $milestone_descs[$i], $milestone_dates[$i]);
+                        $m_stmt->execute();
+                    }
+                }
+                
                 // Create initial document version
                 $version_stmt = $conn->prepare("INSERT INTO document_versions (proposal_id, version_number, file_path, uploaded_by) VALUES (?, 'v1.0', ?, ?)");
                 $version_stmt->bind_param("iss", $proposal_id, $target_file, $email);
                 $version_stmt->execute();
                 
                 notifySystem($conn, 'admin', "New Proposal Submitted: '$title' by $email");
-                $message = "Proposal submitted successfully with budget breakdown!"; 
+                $message = "Proposal submitted successfully with budget breakdown and milestones!"; 
                 $messageType = "success";
             } else {
                 $message = "DB Error: " . $conn->error; 
@@ -298,9 +312,10 @@ if (isset($_POST['request_extension'])) {
 }
 
 // =========================================================
-// LOG EXPENDITURE (USE CASE 9 ENHANCEMENT)
+// LOG EXPENDITURE (OUT-OF-POCKET SPENDING)
 // =========================================================
 if (isset($_POST['log_expenditure'])) {
+    $grant_id = intval($_POST['grant_id']);
     $budget_item_id = intval($_POST['budget_item_id']);
     $amount = floatval($_POST['expenditure_amount']);
     $trans_date = $_POST['transaction_date'];
@@ -317,34 +332,56 @@ if (isset($_POST['log_expenditure'])) {
         move_uploaded_file($_FILES["receipt_file"]["tmp_name"], $receipt_path);
     }
     
-    // Insert expenditure
-    $stmt = $conn->prepare("INSERT INTO expenditures (budget_item_id, amount, transaction_date, description, receipt_path) VALUES (?, ?, ?, ?, ?)");
+    // Insert expenditure (status = PENDING_REIMBURSEMENT, not updating budget yet)
+    $stmt = $conn->prepare("INSERT INTO expenditures (budget_item_id, amount, transaction_date, description, receipt_path, status) VALUES (?, ?, ?, ?, ?, 'PENDING_REIMBURSEMENT')");
     $stmt->bind_param("idsss", $budget_item_id, $amount, $trans_date, $exp_description, $receipt_path);
     
     if ($stmt->execute()) {
-        // Update spent amount in budget_items
-        $update = $conn->prepare("UPDATE budget_items SET spent_amount = spent_amount + ? WHERE id = ?");
-        $update->bind_param("di", $amount, $budget_item_id);
-        $update->execute();
-        
-        // Update total spent in proposals
-        $prop_update = $conn->prepare("
-            UPDATE proposals p
-            SET amount_spent = (
-                SELECT SUM(spent_amount) 
-                FROM budget_items 
-                WHERE proposal_id = (SELECT proposal_id FROM budget_items WHERE id = ?)
-            )
-            WHERE id = (SELECT proposal_id FROM budget_items WHERE id = ?)
-        ");
-        $prop_update->bind_param("ii", $budget_item_id, $budget_item_id);
-        $prop_update->execute();
-        
-        $message = "Expenditure logged successfully!"; 
+        $message = "Expenditure logged successfully! You can now request reimbursement."; 
         $messageType = "success";
     } else {
         $message = "Error logging expenditure."; 
         $messageType = "error";
+    }
+}
+
+// =========================================================
+// REQUEST FUND REIMBURSEMENT
+// =========================================================
+if (isset($_POST['request_reimbursement'])) {
+    $grant_id = intval($_POST['grant_id']);
+    $expenditure_ids = $_POST['expenditure_ids'] ?? [];
+    $justification = mysqli_real_escape_string($conn, $_POST['reimbursement_justification']);
+    
+    if (empty($expenditure_ids)) {
+        $message = "Please select at least one expenditure to claim.";
+        $messageType = "error";
+    } else {
+        // Calculate total claim amount
+        $total_claim = 0;
+        $exp_ids_str = implode(',', array_map('intval', $expenditure_ids));
+        
+        $calc_query = $conn->query("SELECT SUM(amount) as total FROM expenditures WHERE id IN ($exp_ids_str) AND status='PENDING_REIMBURSEMENT'");
+        $total_claim = $calc_query->fetch_assoc()['total'] ?? 0;
+        
+        // Create reimbursement request
+        $stmt = $conn->prepare("INSERT INTO reimbursement_requests (grant_id, researcher_email, total_amount, justification, status, requested_at) VALUES (?, ?, ?, ?, 'PENDING', NOW())");
+        $stmt->bind_param("isds", $grant_id, $email, $total_claim, $justification);
+        
+        if ($stmt->execute()) {
+            $request_id = $conn->insert_id;
+            
+            // Link expenditures to this request
+            foreach ($expenditure_ids as $exp_id) {
+                $link_stmt = $conn->prepare("UPDATE expenditures SET reimbursement_request_id = ?, status = 'UNDER_REVIEW' WHERE id = ?");
+                $link_stmt->bind_param("ii", $request_id, $exp_id);
+                $link_stmt->execute();
+            }
+            
+            notifySystem($conn, 'hod', "Reimbursement Request: $email requests $" . number_format($total_claim, 2) . " for Grant #$grant_id");
+            $message = "Reimbursement request submitted successfully! Awaiting HOD approval.";
+            $messageType = "success";
+        }
     }
 }
 
@@ -381,10 +418,7 @@ $stmt->bind_param("s", $email);
 $stmt->execute();
 $my_reports = $stmt->get_result();
 
-// NOW CONTINUE TO PART 2 FOR THE HTML/FRONTEND...
 ?>
-
-<!-- CONTINUE FROM PART 1 - THIS IS THE HTML/FRONTEND SECTION -->
 
 <!DOCTYPE html>
 <html lang="en">
@@ -426,9 +460,16 @@ $my_reports = $stmt->get_result();
         .milestone-item { padding: 10px; background: white; margin: 5px 0; border-radius: 5px; border-left: 3px solid #17a2b8; }
         .milestone-item.completed { border-left-color: #28a745; opacity: 0.7; }
         
+        .milestone-input { background: #f8f9fa; padding: 15px; margin-bottom: 10px; border-radius: 5px; border-left: 3px solid #17a2b8; position: relative; }
+        .milestone-input input, .milestone-input textarea { width: 100%; margin-bottom: 8px; padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
+        .milestone-input .remove-btn { position: absolute; top: 10px; right: 10px; background: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+        
         .expenditure-table { width: 100%; border-collapse: collapse; margin-top: 15px; }
         .expenditure-table th, .expenditure-table td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }
         .expenditure-table th { background: #f8f9fa; font-weight: 600; }
+        
+        .expenditure-card { background: white; padding: 15px; margin: 10px 0; border-left: 3px solid #ffc107; border-radius: 5px; }
+        .reimburse-checkbox { margin-right: 10px; transform: scale(1.2); }
         
         .status-badge { padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: bold; text-transform: uppercase; }
         .status-badge.submitted { background: #cce5ff; color: #004085; }
@@ -438,6 +479,9 @@ $my_reports = $stmt->get_result();
         .status-badge.resubmitted { background: #d1ecf1; color: #0c5460; }
         .status-badge.appealed { background: #e2e3e5; color: #383d41; }
         .status-badge.pending_review { background: #fff3cd; color: #856404; }
+        .status-badge.pending { background: #fff3cd; color: #856404; }
+        .status-badge.pending_reimbursement { background: #ffeeba; color: #856404; }
+        .status-badge.under_review { background: #d1ecf1; color: #0c5460; }
         
         .btn-action { padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; transition: 0.3s; }
         .btn-edit { background: #17a2b8; color: white; }
@@ -473,6 +517,9 @@ $my_reports = $stmt->get_result();
             </button>
             <button class="tab-btn" onclick="openTab(event, 'grants')">
                 <i class='bx bx-dollar-circle'></i> Active Grants & Budget
+            </button>
+            <button class="tab-btn" onclick="openTab(event, 'expenditures')">
+                <i class='bx bx-receipt'></i> Expenditures & Claims
             </button>
             <button class="tab-btn" onclick="openTab(event, 'reports')">
                 <i class='bx bx-chart'></i> Progress Reports
@@ -530,6 +577,19 @@ $my_reports = $stmt->get_result();
                             <input type="number" name="budget_other" step="0.01" min="0" value="0" class="budget-category" onchange="calculateTotal()">
                         </div>
                     </div>
+                    
+                    <h4 style="color:#3C5B6F; margin-top:20px;">Project Milestones</h4>
+                    <p style="color:#666; font-size:13px; margin-bottom:10px;">Define key deliverables and timeline checkpoints for your project</p>
+                    <div id="milestones_container">
+                        <div class="milestone-input">
+                            <input type="text" name="milestone_title[]" placeholder="Milestone Title (e.g., Literature Review Complete)" required>
+                            <textarea name="milestone_desc[]" rows="2" placeholder="Brief description of this milestone"></textarea>
+                            <input type="date" name="milestone_date[]" required>
+                        </div>
+                    </div>
+                    <button type="button" onclick="addMilestone()" class="btn-save" style="background:#17a2b8; margin-bottom:15px;">
+                        <i class='bx bx-plus'></i> Add Another Milestone
+                    </button>
                     
                     <div class="input-group" style="margin-top:20px;">
                         <label>Proposal Document (PDF) *</label>
@@ -617,7 +677,7 @@ $my_reports = $stmt->get_result();
             <h3 style="color:#3C5B6F; margin-top:0;">
                 <i class='bx bx-wallet'></i> Active Grants - Financial Overview
             </h3>
-            <p style="color:#666; margin-bottom:20px;">Real-time tracking of allocated funds and expenditure.</p>
+            <p style="color:#666; margin-bottom:20px;">Track your allocated budget and approved reimbursements</p>
             
             <?php if ($my_grants->num_rows > 0): ?>
                 <?php while($grant = $my_grants->fetch_assoc()): 
@@ -644,18 +704,18 @@ $my_reports = $stmt->get_result();
                                 <span style="font-size:20px; font-weight:bold;">$<?= number_format($budget, 2) ?></span>
                             </div>
                             <div>
-                                <strong style="color:#dc3545;">Expenditure:</strong><br>
+                                <strong style="color:#dc3545;">Reimbursed:</strong><br>
                                 <span style="font-size:20px; font-weight:bold;">$<?= number_format($spent, 2) ?></span>
                             </div>
                             <div>
-                                <strong style="color:#17a2b8;">Remaining Balance:</strong><br>
+                                <strong style="color:#17a2b8;">Remaining:</strong><br>
                                 <span style="font-size:20px; font-weight:bold;">$<?= number_format($remaining, 2) ?></span>
                             </div>
                         </div>
                         
                         <div class="budget-bar">
                             <div class="budget-fill <?= $bar_class ?>" style="width: <?= min($percentage, 100) ?>%;">
-                                <?= round($percentage, 1) ?>% Used
+                                <?= round($percentage, 1) ?>% Claimed
                             </div>
                         </div>
                         
@@ -674,68 +734,42 @@ $my_reports = $stmt->get_result();
                                 <div class="budget-item">
                                     <strong><?= $item['category'] ?></strong><br>
                                     <small style="color:#666;">
-                                        $<?= number_format($item['spent_amount'], 2) ?> / $<?= number_format($item['allocated_amount'], 2) ?>
+                                        Claimed: $<?= number_format($item['spent_amount'], 2) ?><br>
+                                        Allocated: $<?= number_format($item['allocated_amount'], 2) ?>
                                     </small><br>
                                     <div style="background:#e9ecef; height:8px; border-radius:5px; margin-top:5px; overflow:hidden;">
                                         <div style="background:#3C5B6F; height:100%; width:<?= min($item_percentage, 100) ?>%;"></div>
                                     </div>
-                                    <button onclick="openExpenditureModal(<?= $item['id'] ?>, '<?= $item['category'] ?>')" 
-                                            style="margin-top:8px; padding:5px 10px; background:#17a2b8; color:white; border:none; border-radius:4px; cursor:pointer; font-size:12px;">
-                                        <i class='bx bx-plus'></i> Log Expense
-                                    </button>
                                 </div>
                             <?php endwhile; ?>
                         </div>
                         
-                        <!-- EXPENDITURE HISTORY -->
-                        <h5 style="margin-top:20px; color:#3C5B6F;">Recent Expenditures</h5>
+                        <!-- PROJECT MILESTONES -->
+                        <h5 style="margin-top:20px; color:#3C5B6F;">Project Milestones</h5>
                         <?php
-                        $exp_query = $conn->prepare("
-                            SELECT e.*, b.category 
-                            FROM expenditures e 
-                            JOIN budget_items b ON e.budget_item_id = b.id 
-                            WHERE b.proposal_id = ? 
-                            ORDER BY e.transaction_date DESC 
-                            LIMIT 5
-                        ");
-                        $exp_query->bind_param("i", $grant['id']);
-                        $exp_query->execute();
-                        $expenditures = $exp_query->get_result();
-                        ?>
+                        $m_query = $conn->prepare("SELECT * FROM milestones WHERE grant_id = ? ORDER BY target_date");
+                        $m_query->bind_param("i", $grant['id']);
+                        $m_query->execute();
+                        $milestones = $m_query->get_result();
                         
-                        <?php if($expenditures->num_rows > 0): ?>
-                            <table class="expenditure-table">
-                                <thead>
-                                    <tr>
-                                        <th>Date</th>
-                                        <th>Category</th>
-                                        <th>Description</th>
-                                        <th>Amount</th>
-                                        <th>Receipt</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <?php while($exp = $expenditures->fetch_assoc()): ?>
-                                        <tr>
-                                            <td><?= date('M d, Y', strtotime($exp['transaction_date'])) ?></td>
-                                            <td><?= $exp['category'] ?></td>
-                                            <td><?= htmlspecialchars(substr($exp['description'], 0, 50)) ?></td>
-                                            <td><strong>$<?= number_format($exp['amount'], 2) ?></strong></td>
-                                            <td>
-                                                <?php if($exp['receipt_path']): ?>
-                                                    <a href="<?= $exp['receipt_path'] ?>" target="_blank" style="color:#3C5B6F;">
-                                                        <i class='bx bx-receipt'></i> View
-                                                    </a>
-                                                <?php else: ?>
-                                                    <span style="color:#999;">No receipt</span>
-                                                <?php endif; ?>
-                                            </td>
-                                        </tr>
-                                    <?php endwhile; ?>
-                                </tbody>
-                            </table>
+                        if ($milestones->num_rows > 0):
+                        ?>
+                            <div class="milestone-list">
+                                <?php while ($m = $milestones->fetch_assoc()): ?>
+                                    <div class="milestone-item <?= $m['status'] == 'COMPLETED' ? 'completed' : '' ?>">
+                                        <strong><?= htmlspecialchars($m['title']) ?></strong>
+                                        <span style="float:right; font-size:12px; padding:3px 8px; border-radius:10px; background:<?= $m['status']=='COMPLETED'?'#d4edda':'#fff3cd' ?>; color:<?= $m['status']=='COMPLETED'?'#155724':'#856404' ?>;">
+                                            <?= $m['status'] ?>
+                                        </span>
+                                        <br><small style="color:#666;">Due: <?= date('M d, Y', strtotime($m['target_date'])) ?></small>
+                                        <?php if ($m['description']): ?>
+                                            <br><small style="color:#888;"><?= htmlspecialchars($m['description']) ?></small>
+                                        <?php endif; ?>
+                                    </div>
+                                <?php endwhile; ?>
+                            </div>
                         <?php else: ?>
-                            <p style="color:#999; font-style:italic; text-align:center; padding:20px;">No expenditures logged yet.</p>
+                            <p style="color:#999; font-style:italic;">No milestones defined for this grant</p>
                         <?php endif; ?>
                         
                         <div style="margin-top:20px; text-align:right;">
@@ -753,7 +787,197 @@ $my_reports = $stmt->get_result();
             <?php endif; ?>
         </div>
 
-        <!-- ========== TAB 3: PROGRESS REPORTS ========== -->
+        <!-- ========== TAB 3: EXPENDITURES & CLAIMS ========== -->
+        <div id="expenditures" class="tab-content">
+            <?php 
+            $my_grants->data_seek(0); // Reset pointer
+            if ($my_grants->num_rows > 0): 
+                $grant = $my_grants->fetch_assoc();
+            ?>
+                <h3 style="color:#3C5B6F; margin-top:0;">
+                    <i class='bx bx-receipt'></i> Log Out-of-Pocket Expenditure
+                </h3>
+                <p style="color:#666; margin-bottom:15px;">Record expenses you paid from personal funds. Upload receipts and submit for reimbursement.</p>
+                
+                <form method="POST" enctype="multipart/form-data" style="background:#f8f9fa; padding:20px; border-radius:8px; margin-bottom:30px;">
+                    <input type="hidden" name="grant_id" value="<?= $grant['id'] ?>">
+                    
+                    <div class="grid-2">
+                        <div class="input-group">
+                            <label>Budget Category *</label>
+                            <select name="budget_item_id" required>
+                                <option value="">Select Category</option>
+                                <?php
+                                $bi_query = $conn->prepare("SELECT * FROM budget_items WHERE proposal_id = ?");
+                                $bi_query->bind_param("i", $grant['id']);
+                                $bi_query->execute();
+                                $budget_items = $bi_query->get_result();
+                                while($bi = $budget_items->fetch_assoc()):
+                                    $remaining = $bi['allocated_amount'] - $bi['spent_amount'];
+                                ?>
+                                    <option value="<?= $bi['id'] ?>"><?= $bi['category'] ?> (Remaining: $<?= number_format($remaining, 2) ?>)</option>
+                                <?php endwhile; ?>
+                            </select>
+                        </div>
+                        <div class="input-group">
+                            <label>Amount Spent ($) *</label>
+                            <input type="number" name="expenditure_amount" step="0.01" min="0.01" required placeholder="0.00">
+                        </div>
+                    </div>
+                    
+                    <div class="grid-2">
+                        <div class="input-group">
+                            <label>Transaction Date *</label>
+                            <input type="date" name="transaction_date" required value="<?= date('Y-m-d') ?>">
+                        </div>
+                        <div class="input-group">
+                            <label>Upload Receipt (PDF/Image) *</label>
+                            <input type="file" name="receipt_file" accept=".pdf,.jpg,.jpeg,.png" required>
+                        </div>
+                    </div>
+                    
+                    <div class="input-group">
+                        <label>Description *</label>
+                        <textarea name="expenditure_description" rows="2" required placeholder="What did you purchase? (e.g., Laboratory equipment, Conference registration)"></textarea>
+                    </div>
+                    
+                    <button type="submit" name="log_expenditure" class="btn-save">
+                        <i class='bx bx-save'></i> Log Expenditure
+                    </button>
+                </form>
+
+                <hr style="margin:30px 0;">
+                
+                <h3 style="color:#3C5B6F;">
+                    <i class='bx bx-dollar'></i> Request Reimbursement
+                </h3>
+                <p style="color:#666; margin-bottom:15px;">Select logged expenditures and submit for HOD approval to claim your funds.</p>
+                
+                <?php
+                // Get pending expenditures
+                $exp_query = $conn->prepare("
+                    SELECT e.*, b.category 
+                    FROM expenditures e 
+                    JOIN budget_items b ON e.budget_item_id = b.id 
+                    WHERE b.proposal_id = ? AND e.status = 'PENDING_REIMBURSEMENT'
+                    ORDER BY e.transaction_date DESC
+                ");
+                $exp_query->bind_param("i", $grant['id']);
+                $exp_query->execute();
+                $pending_exp = $exp_query->get_result();
+
+                if ($pending_exp->num_rows > 0):
+                ?>
+                    <form method="POST">
+                        <input type="hidden" name="grant_id" value="<?= $grant['id'] ?>">
+                        
+                        <?php 
+                        $total_selected = 0;
+                        while($exp = $pending_exp->fetch_assoc()): 
+                        ?>
+                            <div class="expenditure-card">
+                                <label style="display:flex; align-items:flex-start; cursor:pointer;">
+                                    <input type="checkbox" name="expenditure_ids[]" value="<?= $exp['id'] ?>" class="reimburse-checkbox" onchange="updateTotal()">
+                                    <div style="flex:1;">
+                                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                                            <strong style="font-size:16px; color:#2c3e50;"><?= $exp['category'] ?></strong>
+                                            <span style="font-size:20px; font-weight:bold; color:#28a745;">$<?= number_format($exp['amount'], 2) ?></span>
+                                        </div>
+                                        <p style="margin:5px 0; color:#666; font-size:13px;">
+                                            <i class='bx bx-calendar'></i> <?= date('M d, Y', strtotime($exp['transaction_date'])) ?>
+                                        </p>
+                                        <p style="margin:5px 0; color:#555;"><?= htmlspecialchars($exp['description']) ?></p>
+                                        <?php if($exp['receipt_path']): ?>
+                                            <a href="<?= $exp['receipt_path'] ?>" target="_blank" style="color:#3C5B6F; font-size:13px; text-decoration:none;">
+                                                <i class='bx bx-receipt'></i> View Receipt
+                                            </a>
+                                        <?php endif; ?>
+                                    </div>
+                                </label>
+                            </div>
+                        <?php endwhile; ?>
+                        
+                        <div style="background:#fff3cd; padding:15px; border-radius:5px; margin:15px 0;">
+                            <strong>Total Amount to Claim: <span id="totalClaim" style="font-size:20px; color:#28a745;">$0.00</span></strong>
+                        </div>
+                        
+                        <div class="input-group">
+                            <label>Justification for Reimbursement *</label>
+                            <textarea name="reimbursement_justification" rows="3" required placeholder="Explain why these expenses were necessary for your research..."></textarea>
+                        </div>
+                        
+                        <button type="submit" name="request_reimbursement" class="btn-save" style="background:#28a745;">
+                            <i class='bx bx-send'></i> Submit Reimbursement Request
+                        </button>
+                    </form>
+                <?php else: ?>
+                    <div style="text-align:center; padding:40px; background:#f8f9fa; border-radius:8px;">
+                        <i class='bx bx-info-circle' style="font-size:48px; color:#999;"></i>
+                        <p style="color:#999;">No pending expenditures. Log your expenses above first!</p>
+                    </div>
+                <?php endif; ?>
+
+                <hr style="margin:30px 0;">
+                
+                <h3 style="color:#3C5B6F;">
+                    <i class='bx bx-history'></i> Reimbursement History
+                </h3>
+                <?php
+                $reimb_query = $conn->prepare("
+                    SELECT * FROM reimbursement_requests 
+                    WHERE grant_id = ? 
+                    ORDER BY requested_at DESC
+                ");
+                $reimb_query->bind_param("i", $grant['id']);
+                $reimb_query->execute();
+                $reimb_history = $reimb_query->get_result();
+
+                if ($reimb_history->num_rows > 0):
+                ?>
+                    <table class="styled-table">
+                        <thead>
+                            <tr>
+                                <th>Request Date</th>
+                                <th>Amount Claimed</th>
+                                <th>Status</th>
+                                <th>HOD Remarks</th>
+                                <th>Reviewed</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php while($req = $reimb_history->fetch_assoc()): ?>
+                                <tr>
+                                    <td><?= date('M d, Y', strtotime($req['requested_at'])) ?></td>
+                                    <td><strong style="color:#28a745;">$<?= number_format($req['total_amount'], 2) ?></strong></td>
+                                    <td>
+                                        <span class="status-badge <?= strtolower($req['status']) ?>">
+                                            <?= $req['status'] ?>
+                                        </span>
+                                    </td>
+                                    <td style="font-size:12px; color:#666; max-width:200px;">
+                                        <?= $req['hod_remarks'] ? htmlspecialchars($req['hod_remarks']) : '-' ?>
+                                    </td>
+                                    <td style="font-size:12px;">
+                                        <?= $req['reviewed_at'] ? date('M d, Y', strtotime($req['reviewed_at'])) : '-' ?>
+                                    </td>
+                                </tr>
+                            <?php endwhile; ?>
+                        </tbody>
+                    </table>
+                <?php else: ?>
+                    <p style="text-align:center; color:#999; padding:20px;">No reimbursement requests submitted yet</p>
+                <?php endif; ?>
+
+            <?php else: ?>
+                <div style="text-align:center; padding:60px;">
+                    <i class='bx bx-info-circle' style="font-size:64px; color:#ccc;"></i>
+                    <h4 style="color:#999;">No Active Grants</h4>
+                    <p style="color:#999;">Submit a proposal and get it approved first to access expenditure tracking.</p>
+                </div>
+            <?php endif; ?>
+        </div>
+
+        <!-- ========== TAB 4: PROGRESS REPORTS ========== -->
         <div id="reports" class="tab-content">
             <h3 style="color:#3C5B6F; margin-top:0;">
                 <i class='bx bx-bar-chart-alt-2'></i> My Progress Reports
@@ -857,10 +1081,8 @@ $my_reports = $stmt->get_result();
         </div>
     </section>
 
-<!-- CONTINUE TO PART 3 FOR MODALS AND JAVASCRIPT... -->
-
-<!-- CONTINUE FROM PART 2 - THIS IS THE MODALS & JAVASCRIPT SECTION -->
-
+    <!-- MODALS -->
+    
     <!-- MODAL: DELETE CONFIRMATION -->
     <div id="deleteModal" class="modal">
         <div class="modal-content" style="width:40%; max-width:500px;">
@@ -987,43 +1209,6 @@ $my_reports = $stmt->get_result();
         </div>
     </div>
 
-    <!-- MODAL: LOG EXPENDITURE -->
-    <div id="expenditureModal" class="modal">
-        <div class="modal-content" style="width:50%; max-width:600px;">
-            <span class="close" onclick="closeModal('expenditureModal')">&times;</span>
-            <h3 style="color:#17a2b8; margin-top:0;">
-                <i class='bx bx-receipt'></i> Log Expenditure
-            </h3>
-            <p style="color:#666; font-size:14px;">Category: <strong id="exp_category_name"></strong></p>
-            <form method="POST" enctype="multipart/form-data">
-                <input type="hidden" name="budget_item_id" id="exp_budget_item_id">
-                <div class="input-group">
-                    <label>Amount Spent ($) *</label>
-                    <input type="number" name="expenditure_amount" step="0.01" min="0.01" required placeholder="0.00">
-                </div>
-                <div class="input-group">
-                    <label>Transaction Date *</label>
-                    <input type="date" name="transaction_date" required value="<?= date('Y-m-d') ?>">
-                </div>
-                <div class="input-group">
-                    <label>Description *</label>
-                    <textarea name="expenditure_description" rows="3" required placeholder="What was purchased/paid for?"></textarea>
-                </div>
-                <div class="input-group">
-                    <label>Upload Receipt (Optional)</label>
-                    <input type="file" name="receipt_file" accept=".pdf,.jpg,.jpeg,.png">
-                    <small style="color:#666;">Accepted: PDF, JPG, PNG</small>
-                </div>
-                <button type="submit" name="log_expenditure" class="btn-save">
-                    <i class='bx bx-save'></i> Log Expenditure
-                </button>
-                <button type="button" onclick="closeModal('expenditureModal')" style="background:#6c757d; color:white; border:none; padding:10px 20px; border-radius:5px; cursor:pointer; margin-left:10px;">
-                    Cancel
-                </button>
-            </form>
-        </div>
-    </div>
-
     <!-- MODAL: REQUEST DEADLINE EXTENSION -->
     <div id="extModal" class="modal">
         <div class="modal-content">
@@ -1056,6 +1241,9 @@ $my_reports = $stmt->get_result();
     </div>
 
     <script>
+                // ========== FIXED JAVASCRIPT FOR RESEARCHER_PAGE.PHP ==========
+        // Replace the entire <script> section at the bottom of your researcher_page.php with this
+
         // ========== TAB SWITCHING ==========
         function openTab(evt, tabName) {
             var tabcontent = document.getElementsByClassName("tab-content");
@@ -1078,6 +1266,42 @@ $my_reports = $stmt->get_result();
                 total += parseFloat(categories[i].value) || 0;
             }
             document.getElementById('totalBudget').value = total.toFixed(2);
+        }
+
+        // ========== MILESTONE MANAGEMENT ==========
+        function addMilestone() {
+            var container = document.getElementById('milestones_container');
+            var newMilestone = document.createElement('div');
+            newMilestone.className = 'milestone-input';
+            newMilestone.innerHTML = `
+                <button type="button" class="remove-btn" onclick="this.parentElement.remove()">Remove</button>
+                <input type="text" name="milestone_title[]" placeholder="Milestone Title" required>
+                <textarea name="milestone_desc[]" rows="2" placeholder="Brief description"></textarea>
+                <input type="date" name="milestone_date[]" required>
+            `;
+            container.appendChild(newMilestone);
+        }
+
+        // ========== REIMBURSEMENT TOTAL CALCULATION - FIXED ==========
+        function updateTotal() {
+            var checkboxes = document.getElementsByClassName('reimburse-checkbox');
+            var total = 0;
+            
+            for (var i = 0; i < checkboxes.length; i++) {
+                if (checkboxes[i].checked) {
+                    var card = checkboxes[i].closest('.expenditure-card');
+                    var amountText = card.querySelector('span[style*="font-size:20px"]').textContent;
+                    // Remove $ and commas, then parse
+                    var amount = parseFloat(amountText.replace(/[$,]/g, ''));
+                    if (!isNaN(amount)) {
+                        total += amount;
+                    }
+                }
+            }
+            
+            // Format with commas
+            var formatted = '$' + total.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+            document.getElementById('totalClaim').textContent = formatted;
         }
 
         // ========== DELETE CONFIRMATION ==========
@@ -1109,6 +1333,11 @@ $my_reports = $stmt->get_result();
                 .then(response => response.json())
                 .then(data => {
                     var container = document.getElementById('milestone_container');
+                    if (data.error) {
+                        container.innerHTML = '<p style="color:#dc3545;">' + data.error + '</p>';
+                        return;
+                    }
+                    
                     if (data.length > 0) {
                         var html = '';
                         data.forEach(function(milestone) {
@@ -1126,15 +1355,8 @@ $my_reports = $stmt->get_result();
                 })
                 .catch(error => {
                     console.error('Error loading milestones:', error);
-                    document.getElementById('milestone_container').innerHTML = '<p style="color:#dc3545;">Error loading milestones.</p>';
+                    document.getElementById('milestone_container').innerHTML = '<p style="color:#dc3545;">Error loading milestones. Please try again.</p>';
                 });
-        }
-
-        // ========== EXPENDITURE MODAL ==========
-        function openExpenditureModal(budgetItemId, categoryName) {
-            document.getElementById('expenditureModal').style.display = "block";
-            document.getElementById('exp_budget_item_id').value = budgetItemId;
-            document.getElementById('exp_category_name').textContent = categoryName;
         }
 
         // ========== EXTENSION MODAL ==========
