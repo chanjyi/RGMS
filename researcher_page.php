@@ -312,7 +312,7 @@ if (isset($_POST['request_extension'])) {
 }
 
 // =========================================================
-// LOG EXPENDITURE (OUT-OF-POCKET SPENDING)
+// LOG EXPENDITURE (OUT-OF-POCKET SPENDING) - UPDATED
 // =========================================================
 if (isset($_POST['log_expenditure'])) {
     $grant_id = intval($_POST['grant_id']);
@@ -321,27 +321,78 @@ if (isset($_POST['log_expenditure'])) {
     $trans_date = $_POST['transaction_date'];
     $exp_description = mysqli_real_escape_string($conn, $_POST['expenditure_description']);
     
-    // Handle receipt upload
-    $receipt_path = null;
-    if (isset($_FILES['receipt_file']) && $_FILES['receipt_file']['size'] > 0) {
-        $receipt_dir = "uploads/receipts/";
-        if (!is_dir($receipt_dir)) mkdir($receipt_dir, 0777, true);
-        
-        $receipt_name = "receipt_" . time() . "_" . basename($_FILES["receipt_file"]["name"]);
-        $receipt_path = $receipt_dir . $receipt_name;
-        move_uploaded_file($_FILES["receipt_file"]["tmp_name"], $receipt_path);
-    }
+    // Verify the grant belongs to this researcher and is approved
+    $verify_grant = $conn->prepare("SELECT id FROM proposals WHERE id = ? AND researcher_email = ? AND status = 'APPROVED'");
+    $verify_grant->bind_param("is", $grant_id, $email);
+    $verify_grant->execute();
     
-    // Insert expenditure (status = PENDING_REIMBURSEMENT, not updating budget yet)
-    $stmt = $conn->prepare("INSERT INTO expenditures (budget_item_id, amount, transaction_date, description, receipt_path, status) VALUES (?, ?, ?, ?, ?, 'PENDING_REIMBURSEMENT')");
-    $stmt->bind_param("idsss", $budget_item_id, $amount, $trans_date, $exp_description, $receipt_path);
-    
-    if ($stmt->execute()) {
-        $message = "Expenditure logged successfully! You can now request reimbursement."; 
-        $messageType = "success";
-    } else {
-        $message = "Error logging expenditure."; 
+    if ($verify_grant->get_result()->num_rows === 0) {
+        $message = "Invalid grant selected or grant not approved.";
         $messageType = "error";
+    } else {
+        // Verify budget item belongs to this grant
+        $verify_budget = $conn->prepare("SELECT allocated_amount, spent_amount FROM budget_items WHERE id = ? AND proposal_id = ?");
+        $verify_budget->bind_param("ii", $budget_item_id, $grant_id);
+        $verify_budget->execute();
+        $budget_result = $verify_budget->get_result();
+        
+        if ($budget_result->num_rows === 0) {
+            $message = "Invalid budget category for this grant.";
+            $messageType = "error";
+        } else {
+            $budget_item = $budget_result->fetch_assoc();
+            $remaining = $budget_item['allocated_amount'] - $budget_item['spent_amount'];
+            
+            // Check if amount exceeds remaining budget
+            if ($amount > $remaining) {
+                $message = "Expenditure amount ($" . number_format($amount, 2) . ") exceeds remaining budget ($" . number_format($remaining, 2) . ") for this category.";
+                $messageType = "error";
+            } else {
+                // Handle receipt upload
+                $receipt_path = null;
+                if (isset($_FILES['receipt_file']) && $_FILES['receipt_file']['size'] > 0) {
+                    $receipt_dir = "uploads/receipts/";
+                    if (!is_dir($receipt_dir)) mkdir($receipt_dir, 0777, true);
+                    
+                    $file_ext = strtolower(pathinfo($_FILES['receipt_file']['name'], PATHINFO_EXTENSION));
+                    $allowed_ext = ['pdf', 'jpg', 'jpeg', 'png'];
+                    
+                    if (!in_array($file_ext, $allowed_ext)) {
+                        $message = "Invalid receipt file type. Only PDF, JPG, JPEG, and PNG are allowed.";
+                        $messageType = "error";
+                    } else {
+                        $receipt_name = "receipt_" . time() . "_grant" . $grant_id . "." . $file_ext;
+                        $receipt_path = $receipt_dir . $receipt_name;
+                        
+                        if (!move_uploaded_file($_FILES['receipt_file']['tmp_name'], $receipt_path)) {
+                            $message = "Failed to upload receipt file.";
+                            $messageType = "error";
+                            $receipt_path = null;
+                        }
+                    }
+                }
+                
+                // Only insert if no errors and receipt uploaded successfully
+                if ($messageType !== "error") {
+                    // Insert expenditure (status = PENDING_REIMBURSEMENT)
+                    $stmt = $conn->prepare("INSERT INTO expenditures (budget_item_id, amount, transaction_date, description, receipt_path, status) VALUES (?, ?, ?, ?, ?, 'PENDING_REIMBURSEMENT')");
+                    $stmt->bind_param("idsss", $budget_item_id, $amount, $trans_date, $exp_description, $receipt_path);
+                    
+                    if ($stmt->execute()) {
+                        $message = "Expenditure logged successfully for Grant #" . $grant_id . "! You can now request reimbursement."; 
+                        $messageType = "success";
+                    } else {
+                        $message = "Error logging expenditure: " . $conn->error; 
+                        $messageType = "error";
+                        
+                        // Clean up uploaded file if DB insert fails
+                        if ($receipt_path && file_exists($receipt_path)) {
+                            unlink($receipt_path);
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -790,9 +841,13 @@ $my_reports = $stmt->get_result();
         <!-- ========== TAB 3: EXPENDITURES & CLAIMS ========== -->
         <div id="expenditures" class="tab-content">
             <?php 
-            $my_grants->data_seek(0); // Reset pointer
-            if ($my_grants->num_rows > 0): 
-                $grant = $my_grants->fetch_assoc();
+            // Get all active grants for this researcher
+            $active_grants_query = $conn->prepare("SELECT * FROM proposals WHERE researcher_email = ? AND status = 'APPROVED' ORDER BY approved_at DESC");
+            $active_grants_query->bind_param("s", $email);
+            $active_grants_query->execute();
+            $active_grants_result = $active_grants_query->get_result();
+            
+            if ($active_grants_result->num_rows > 0): 
             ?>
                 <h3 style="color:#3C5B6F; margin-top:0;">
                     <i class='bx bx-receipt'></i> Log Out-of-Pocket Expenditure
@@ -800,23 +855,31 @@ $my_reports = $stmt->get_result();
                 <p style="color:#666; margin-bottom:15px;">Record expenses you paid from personal funds. Upload receipts and submit for reimbursement.</p>
                 
                 <form method="POST" enctype="multipart/form-data" style="background:#f8f9fa; padding:20px; border-radius:8px; margin-bottom:30px;">
-                    <input type="hidden" name="grant_id" value="<?= $grant['id'] ?>">
+                    
+                    <div class="input-group" style="margin-bottom:20px;">
+                        <label>Select Grant / Project *</label>
+                        <select name="grant_id" id="grantSelector" required onchange="loadBudgetCategories(this.value)">
+                            <option value="">Choose a grant to log expenditure for...</option>
+                            <?php 
+                            $active_grants_result->data_seek(0); // Reset pointer
+                            while($grant = $active_grants_result->fetch_assoc()): 
+                                $total_budget = $grant['approved_budget'] ?? 0;
+                                $spent = $grant['amount_spent'] ?? 0;
+                                $remaining = $total_budget - $spent;
+                            ?>
+                                <option value="<?= $grant['id'] ?>">
+                                    <?= htmlspecialchars($grant['title']) ?> 
+                                    (Grant #<?= $grant['id'] ?> - Remaining: $<?= number_format($remaining, 2) ?>)
+                                </option>
+                            <?php endwhile; ?>
+                        </select>
+                    </div>
                     
                     <div class="grid-2">
                         <div class="input-group">
                             <label>Budget Category *</label>
-                            <select name="budget_item_id" required>
-                                <option value="">Select Category</option>
-                                <?php
-                                $bi_query = $conn->prepare("SELECT * FROM budget_items WHERE proposal_id = ?");
-                                $bi_query->bind_param("i", $grant['id']);
-                                $bi_query->execute();
-                                $budget_items = $bi_query->get_result();
-                                while($bi = $budget_items->fetch_assoc()):
-                                    $remaining = $bi['allocated_amount'] - $bi['spent_amount'];
-                                ?>
-                                    <option value="<?= $bi['id'] ?>"><?= $bi['category'] ?> (Remaining: $<?= number_format($remaining, 2) ?>)</option>
-                                <?php endwhile; ?>
+                            <select name="budget_item_id" id="budgetCategorySelector" required disabled>
+                                <option value="">Select a grant first...</option>
                             </select>
                         </div>
                         <div class="input-group">
@@ -828,7 +891,7 @@ $my_reports = $stmt->get_result();
                     <div class="grid-2">
                         <div class="input-group">
                             <label>Transaction Date *</label>
-                            <input type="date" name="transaction_date" required value="<?= date('Y-m-d') ?>">
+                            <input type="date" name="transaction_date" required value="<?= date('Y-m-d') ?>" max="<?= date('Y-m-d') ?>">
                         </div>
                         <div class="input-group">
                             <label>Upload Receipt (PDF/Image) *</label>
@@ -853,52 +916,76 @@ $my_reports = $stmt->get_result();
                 </h3>
                 <p style="color:#666; margin-bottom:15px;">Select logged expenditures and submit for HOD approval to claim your funds.</p>
                 
+                <!-- Grant selector for viewing expenditures -->
+                <div style="background:#f8f9fa; padding:15px; border-radius:8px; margin-bottom:20px;">
+                    <label style="display:block; margin-bottom:8px; font-weight:600; color:#333;">View Expenditures For:</label>
+                    <select id="viewGrantSelector" onchange="filterExpenditures(this.value)" style="width:100%; padding:10px; border:1px solid #ddd; border-radius:5px;">
+                        <option value="">All Grants</option>
+                        <?php 
+                        $active_grants_result->data_seek(0); // Reset pointer again
+                        while($grant = $active_grants_result->fetch_assoc()): 
+                        ?>
+                            <option value="<?= $grant['id'] ?>">
+                                <?= htmlspecialchars($grant['title']) ?> (Grant #<?= $grant['id'] ?>)
+                            </option>
+                        <?php endwhile; ?>
+                    </select>
+                </div>
+                
                 <?php
-                // Get pending expenditures
+                // Get ALL pending expenditures across all grants
                 $exp_query = $conn->prepare("
-                    SELECT e.*, b.category 
+                    SELECT e.*, b.category, b.proposal_id, p.title as grant_title
                     FROM expenditures e 
                     JOIN budget_items b ON e.budget_item_id = b.id 
-                    WHERE b.proposal_id = ? AND e.status = 'PENDING_REIMBURSEMENT'
+                    JOIN proposals p ON b.proposal_id = p.id
+                    WHERE p.researcher_email = ? AND e.status = 'PENDING_REIMBURSEMENT'
                     ORDER BY e.transaction_date DESC
                 ");
-                $exp_query->bind_param("i", $grant['id']);
+                $exp_query->bind_param("s", $email);
                 $exp_query->execute();
                 $pending_exp = $exp_query->get_result();
 
                 if ($pending_exp->num_rows > 0):
                 ?>
                     <form method="POST">
-                        <input type="hidden" name="grant_id" value="<?= $grant['id'] ?>">
+                        <input type="hidden" name="grant_id" id="reimbursementGrantId">
                         
-                        <?php 
-                        $total_selected = 0;
-                        while($exp = $pending_exp->fetch_assoc()): 
-                        ?>
-                            <div class="expenditure-card">
-                                <label style="display:flex; align-items:flex-start; cursor:pointer;">
-                                    <input type="checkbox" name="expenditure_ids[]" value="<?= $exp['id'] ?>" class="reimburse-checkbox" onchange="updateTotal()">
-                                    <div style="flex:1;">
-                                        <div style="display:flex; justify-content:space-between; align-items:center;">
-                                            <strong style="font-size:16px; color:#2c3e50;"><?= $exp['category'] ?></strong>
-                                            <span style="font-size:20px; font-weight:bold; color:#28a745;">$<?= number_format($exp['amount'], 2) ?></span>
+                        <div id="expenditureContainer">
+                            <?php while($exp = $pending_exp->fetch_assoc()): ?>
+                                <div class="expenditure-card" data-grant-id="<?= $exp['proposal_id'] ?>">
+                                    <label style="display:flex; align-items:flex-start; cursor:pointer;">
+                                        <input type="checkbox" name="expenditure_ids[]" value="<?= $exp['id'] ?>" class="reimburse-checkbox" data-grant-id="<?= $exp['proposal_id'] ?>" data-amount="<?= $exp['amount'] ?>" onchange="updateTotal()">
+                                        <div style="flex:1;">
+                                            <div style="display:flex; justify-content:space-between; align-items:center;">
+                                                <div>
+                                                    <strong style="font-size:16px; color:#2c3e50;"><?= $exp['category'] ?></strong>
+                                                    <br>
+                                                    <small style="color:#17a2b8; font-weight:600;">
+                                                        <i class='bx bx-file-blank'></i> <?= htmlspecialchars($exp['grant_title']) ?>
+                                                    </small>
+                                                </div>
+                                                <span style="font-size:20px; font-weight:bold; color:#28a745;">$<?= number_format($exp['amount'], 2) ?></span>
+                                            </div>
+                                            <p style="margin:5px 0; color:#666; font-size:13px;">
+                                                <i class='bx bx-calendar'></i> <?= date('M d, Y', strtotime($exp['transaction_date'])) ?>
+                                            </p>
+                                            <p style="margin:5px 0; color:#555;"><?= htmlspecialchars($exp['description']) ?></p>
+                                            <?php if($exp['receipt_path']): ?>
+                                                <a href="<?= $exp['receipt_path'] ?>" target="_blank" style="color:#3C5B6F; font-size:13px; text-decoration:none;">
+                                                    <i class='bx bx-receipt'></i> View Receipt
+                                                </a>
+                                            <?php endif; ?>
                                         </div>
-                                        <p style="margin:5px 0; color:#666; font-size:13px;">
-                                            <i class='bx bx-calendar'></i> <?= date('M d, Y', strtotime($exp['transaction_date'])) ?>
-                                        </p>
-                                        <p style="margin:5px 0; color:#555;"><?= htmlspecialchars($exp['description']) ?></p>
-                                        <?php if($exp['receipt_path']): ?>
-                                            <a href="<?= $exp['receipt_path'] ?>" target="_blank" style="color:#3C5B6F; font-size:13px; text-decoration:none;">
-                                                <i class='bx bx-receipt'></i> View Receipt
-                                            </a>
-                                        <?php endif; ?>
-                                    </div>
-                                </label>
-                            </div>
-                        <?php endwhile; ?>
+                                    </label>
+                                </div>
+                            <?php endwhile; ?>
+                        </div>
                         
                         <div style="background:#fff3cd; padding:15px; border-radius:5px; margin:15px 0;">
                             <strong>Total Amount to Claim: <span id="totalClaim" style="font-size:20px; color:#28a745;">$0.00</span></strong>
+                            <br>
+                            <small id="selectedGrantInfo" style="color:#856404;"></small>
                         </div>
                         
                         <div class="input-group">
@@ -924,11 +1011,13 @@ $my_reports = $stmt->get_result();
                 </h3>
                 <?php
                 $reimb_query = $conn->prepare("
-                    SELECT * FROM reimbursement_requests 
-                    WHERE grant_id = ? 
-                    ORDER BY requested_at DESC
+                    SELECT rr.*, p.title as grant_title
+                    FROM reimbursement_requests rr
+                    JOIN proposals p ON rr.grant_id = p.id
+                    WHERE rr.researcher_email = ?
+                    ORDER BY rr.requested_at DESC
                 ");
-                $reimb_query->bind_param("i", $grant['id']);
+                $reimb_query->bind_param("s", $email);
                 $reimb_query->execute();
                 $reimb_history = $reimb_query->get_result();
 
@@ -937,6 +1026,7 @@ $my_reports = $stmt->get_result();
                     <table class="styled-table">
                         <thead>
                             <tr>
+                                <th>Grant</th>
                                 <th>Request Date</th>
                                 <th>Amount Claimed</th>
                                 <th>Status</th>
@@ -947,6 +1037,10 @@ $my_reports = $stmt->get_result();
                         <tbody>
                             <?php while($req = $reimb_history->fetch_assoc()): ?>
                                 <tr>
+                                    <td style="font-size:13px; color:#3C5B6F;">
+                                        <strong><?= htmlspecialchars($req['grant_title']) ?></strong>
+                                        <br><small style="color:#999;">Grant #<?= $req['grant_id'] ?></small>
+                                    </td>
                                     <td><?= date('M d, Y', strtotime($req['requested_at'])) ?></td>
                                     <td><strong style="color:#28a745;">$<?= number_format($req['total_amount'], 2) ?></strong></td>
                                     <td>
@@ -976,6 +1070,112 @@ $my_reports = $stmt->get_result();
                 </div>
             <?php endif; ?>
         </div>
+
+        <script>
+        // Load budget categories dynamically when grant is selected
+        function loadBudgetCategories(grantId) {
+            const categorySelector = document.getElementById('budgetCategorySelector');
+            
+            if (!grantId) {
+                categorySelector.innerHTML = '<option value="">Select a grant first...</option>';
+                categorySelector.disabled = true;
+                return;
+            }
+            
+            // Show loading state
+            categorySelector.innerHTML = '<option value="">Loading categories...</option>';
+            categorySelector.disabled = true;
+            
+            // Fetch budget categories via AJAX
+            fetch('get_budget_categories.php?grant_id=' + grantId)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        categorySelector.innerHTML = '<option value="">Error loading categories</option>';
+                        return;
+                    }
+                    
+                    if (data.length === 0) {
+                        categorySelector.innerHTML = '<option value="">No budget categories available</option>';
+                        return;
+                    }
+                    
+                    // Populate dropdown
+                    let html = '<option value="">Select Category</option>';
+                    data.forEach(item => {
+                        const remaining = parseFloat(item.allocated_amount) - parseFloat(item.spent_amount);
+                        html += `<option value="${item.id}">${item.category} (Remaining: $${remaining.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')})</option>`;
+                    });
+                    
+                    categorySelector.innerHTML = html;
+                    categorySelector.disabled = false;
+                })
+                .catch(error => {
+                    console.error('Error loading categories:', error);
+                    categorySelector.innerHTML = '<option value="">Error loading categories</option>';
+                });
+        }
+
+        // Filter expenditures by grant
+        function filterExpenditures(grantId) {
+            const cards = document.querySelectorAll('.expenditure-card');
+            
+            cards.forEach(card => {
+                if (!grantId || card.dataset.grantId === grantId) {
+                    card.style.display = 'block';
+                } else {
+                    card.style.display = 'none';
+                    // Uncheck hidden checkboxes
+                    const checkbox = card.querySelector('.reimburse-checkbox');
+                    if (checkbox) checkbox.checked = false;
+                }
+            });
+            
+            updateTotal();
+        }
+
+        // Update total and validate same grant
+        function updateTotal() {
+            const checkboxes = document.querySelectorAll('.reimburse-checkbox:checked');
+            let total = 0;
+            let selectedGrantId = null;
+            let allSameGrant = true;
+            
+            checkboxes.forEach(checkbox => {
+                const amount = parseFloat(checkbox.dataset.amount);
+                const grantId = checkbox.dataset.grantId;
+                
+                if (selectedGrantId === null) {
+                    selectedGrantId = grantId;
+                } else if (selectedGrantId !== grantId) {
+                    allSameGrant = false;
+                }
+                
+                total += amount;
+            });
+            
+            // Update display
+            const formatted = '$' + total.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+            document.getElementById('totalClaim').textContent = formatted;
+            
+            // Update grant info
+            const infoElement = document.getElementById('selectedGrantInfo');
+            const grantIdInput = document.getElementById('reimbursementGrantId');
+            
+            if (checkboxes.length === 0) {
+                infoElement.textContent = '';
+                grantIdInput.value = '';
+            } else if (!allSameGrant) {
+                infoElement.innerHTML = '<i class="bx bx-error"></i> Warning: You can only claim expenditures from one grant at a time. Please select items from the same grant.';
+                infoElement.style.color = '#dc3545';
+                grantIdInput.value = '';
+            } else {
+                infoElement.textContent = `Claiming for Grant #${selectedGrantId} (${checkboxes.length} item${checkboxes.length > 1 ? 's' : ''})`;
+                infoElement.style.color = '#856404';
+                grantIdInput.value = selectedGrantId;
+            }
+        }
+        </script>
 
         <!-- ========== TAB 4: PROGRESS REPORTS ========== -->
         <div id="reports" class="tab-content">
