@@ -173,28 +173,22 @@ while($row = $result->fetch_assoc()) {
         
         .chart-container { 
             background: white; 
-            padding: 25px; 
+            padding: 20px; 
             border-radius: 12px; 
             box-shadow: 0 2px 8px rgba(0,0,0,0.1); 
             margin-bottom: 25px;
-            overflow: hidden;
         }
         
         .chart-container h3 { 
-            margin: 0 0 20px 0; 
+            margin: 0 0 15px 0; 
             color: #3C5B6F; 
-            font-size: 18px; 
+            font-size: 16px; 
         }
         
         .chart-wrapper { 
             position: relative; 
-            height: 280px;
+            height: 250px;
             width: 100%;
-        }
-        
-        .chart-wrapper canvas {
-            max-width: 100%;
-            max-height: 100%;
         }
         
         .grid-2 { 
@@ -293,9 +287,6 @@ while($row = $result->fetch_assoc()) {
         @media (max-width: 768px) {
             .grid-2 {
                 grid-template-columns: 1fr;
-            }
-            .chart-wrapper {
-                height: 300px;
             }
         }
     </style>
@@ -472,11 +463,9 @@ while($row = $result->fetch_assoc()) {
         </div>
     </section>
 
-    <script type="text/javascript">
-    (function() {
-        'use strict';
-        
-        const appColors = {
+    <script>
+    window.addEventListener('load', function() {
+        const colors = {
             primary: '#3C5B6F',
             success: '#28a745',
             warning: '#ffc107',
@@ -486,135 +475,117 @@ while($row = $result->fetch_assoc()) {
             dark: '#2c4555'
         };
 
-        function initCharts() {
-            // Status Chart
-            const statusEl = document.getElementById('statusChart');
-            if (statusEl) {
-                const statusData = <?php echo json_encode(array_values($stats['status'])); ?>;
-                const statusLabels = <?php echo json_encode(array_keys($stats['status'])); ?>;
-                
-                if (statusData.length > 0) {
-                    new Chart(statusEl, {
-                        type: 'doughnut',
-                        data: {
-                            labels: statusLabels,
-                            datasets: [{
-                                data: statusData,
-                                backgroundColor: [appColors.success, appColors.info, appColors.warning, appColors.danger, appColors.primary, appColors.secondary, appColors.dark],
-                                borderWidth: 2,
-                                borderColor: '#fff'
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            plugins: {
-                                legend: { 
-                                    position: 'right',
-                                    labels: { padding: 10, font: { size: 11 }, boxWidth: 15 }
-                                }
-                            }
+        // Status Chart
+        const statusEl = document.getElementById('statusChart');
+        if (statusEl) {
+            new Chart(statusEl, {
+                type: 'doughnut',
+                data: {
+                    labels: <?php echo json_encode(array_keys($stats['status'])); ?>,
+                    datasets: [{
+                        data: <?php echo json_encode(array_values($stats['status'])); ?>,
+                        backgroundColor: [colors.success, colors.info, colors.warning, colors.danger, colors.primary, colors.secondary, colors.dark],
+                        borderWidth: 2,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { 
+                            position: 'right',
+                            labels: { padding: 8, font: { size: 10 }, boxWidth: 12 }
                         }
-                    });
+                    }
                 }
-            }
+            });
+        }
 
-            // Category Chart
-            const categoryEl = document.getElementById('categoryChart');
-            if (categoryEl) {
-                const categoryLabels = <?php echo json_encode(array_column($stats['categories'], 'category')); ?>;
-                const allocatedData = <?php echo json_encode(array_map('floatval', array_column($stats['categories'], 'allocated'))); ?>;
-                const spentData = <?php echo json_encode(array_map('floatval', array_column($stats['categories'], 'spent'))); ?>;
-                
-                new Chart(categoryEl, {
-                    type: 'bar',
-                    data: {
-                        labels: categoryLabels,
-                        datasets: [
-                            { label: 'Allocated', data: allocatedData, backgroundColor: appColors.info },
-                            { label: 'Spent', data: spentData, backgroundColor: appColors.success }
-                        ]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        scales: {
-                            y: { 
-                                beginAtZero: true,
-                                ticks: { callback: function(value) { return '$' + value.toLocaleString(); } }
-                            }
+        // Category Chart
+        const categoryEl = document.getElementById('categoryChart');
+        if (categoryEl) {
+            new Chart(categoryEl, {
+                type: 'bar',
+                data: {
+                    labels: <?php echo json_encode(array_column($stats['categories'], 'category')); ?>,
+                    datasets: [
+                        { label: 'Allocated', data: <?php echo json_encode(array_map('floatval', array_column($stats['categories'], 'allocated'))); ?>, backgroundColor: colors.info },
+                        { label: 'Spent', data: <?php echo json_encode(array_map('floatval', array_column($stats['categories'], 'spent'))); ?>, backgroundColor: colors.success }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { 
+                            beginAtZero: true,
+                            ticks: { callback: function(val) { return '$' + val; }, font: { size: 9 } }
                         },
-                        plugins: {
-                            legend: { position: 'top', labels: { boxWidth: 15, padding: 10, font: { size: 11 } } }
-                        }
-                    }
-                });
-            }
-
-            // Trend Chart
-            const trendEl = document.getElementById('trendChart');
-            if (trendEl) {
-                const trendLabels = <?php echo json_encode(array_column($stats['trends'], 'month')); ?>;
-                const trendData = <?php echo json_encode(array_map('intval', array_column($stats['trends'], 'submissions'))); ?>;
-                
-                new Chart(trendEl, {
-                    type: 'line',
-                    data: {
-                        labels: trendLabels,
-                        datasets: [{
-                            label: 'Proposals Submitted',
-                            data: trendData,
-                            borderColor: appColors.primary,
-                            backgroundColor: 'rgba(60, 91, 111, 0.1)',
-                            tension: 0.4,
-                            fill: true
-                        }]
+                        x: { ticks: { font: { size: 9 } } }
                     },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } },
-                        plugins: { legend: { position: 'top', labels: { boxWidth: 15, padding: 10, font: { size: 11 } } } }
+                    plugins: {
+                        legend: { position: 'top', labels: { boxWidth: 12, padding: 8, font: { size: 10 } } }
                     }
-                });
-            }
-
-            // Milestone Chart
-            const milestoneEl = document.getElementById('milestoneChart');
-            if (milestoneEl) {
-                const milestoneData = [
-                    <?php echo intval($stats['milestones']['completed'] ?? 0); ?>,
-                    <?php echo intval($stats['milestones']['in_progress'] ?? 0); ?>,
-                    <?php echo intval($stats['milestones']['pending'] ?? 0); ?>,
-                    <?php echo intval($stats['milestones']['delayed'] ?? 0); ?>
-                ];
-                
-                new Chart(milestoneEl, {
-                    type: 'pie',
-                    data: {
-                        labels: ['Completed', 'In Progress', 'Pending', 'Delayed'],
-                        datasets: [{
-                            data: milestoneData,
-                            backgroundColor: [appColors.success, appColors.info, appColors.warning, appColors.danger],
-                            borderWidth: 2,
-                            borderColor: '#fff'
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: { legend: { position: 'bottom', labels: { padding: 10, font: { size: 11 }, boxWidth: 15 } } }
-                    }
-                });
-            }
+                }
+            });
         }
 
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', initCharts);
-        } else {
-            initCharts();
+        // Trend Chart
+        const trendEl = document.getElementById('trendChart');
+        if (trendEl) {
+            new Chart(trendEl, {
+                type: 'line',
+                data: {
+                    labels: <?php echo json_encode(array_column($stats['trends'], 'month')); ?>,
+                    datasets: [{
+                        label: 'Proposals',
+                        data: <?php echo json_encode(array_map('intval', array_column($stats['trends'], 'submissions'))); ?>,
+                        borderColor: colors.primary,
+                        backgroundColor: 'rgba(60, 91, 111, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: { 
+                        y: { beginAtZero: true, ticks: { stepSize: 1, font: { size: 9 } } },
+                        x: { ticks: { font: { size: 9 } } }
+                    },
+                    plugins: { legend: { position: 'top', labels: { boxWidth: 12, padding: 8, font: { size: 10 } } } }
+                }
+            });
         }
-    })();
+
+        // Milestone Chart
+        const milestoneEl = document.getElementById('milestoneChart');
+        if (milestoneEl) {
+            new Chart(milestoneEl, {
+                type: 'pie',
+                data: {
+                    labels: ['Completed', 'In Progress', 'Pending', 'Delayed'],
+                    datasets: [{
+                        data: [
+                            <?php echo intval($stats['milestones']['completed'] ?? 0); ?>,
+                            <?php echo intval($stats['milestones']['in_progress'] ?? 0); ?>,
+                            <?php echo intval($stats['milestones']['pending'] ?? 0); ?>,
+                            <?php echo intval($stats['milestones']['delayed'] ?? 0); ?>
+                        ],
+                        backgroundColor: [colors.success, colors.info, colors.warning, colors.danger],
+                        borderWidth: 2,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom', labels: { padding: 8, font: { size: 10 }, boxWidth: 12 } } }
+                }
+            });
+        }
+    });
     </script>
 </body>
 </html>
