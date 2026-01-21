@@ -1241,8 +1241,6 @@ $my_reports = $stmt->get_result();
     </div>
 
     <script>
-                // ========== FIXED JAVASCRIPT FOR RESEARCHER_PAGE.PHP ==========
-        // Replace the entire <script> section at the bottom of your researcher_page.php with this
 
         // ========== TAB SWITCHING ==========
         function openTab(evt, tabName) {
