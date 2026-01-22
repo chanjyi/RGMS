@@ -1,35 +1,24 @@
 <?php
 // sidebar.php
-// 1. Ensure Session is started
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
-
-// 2. Ensure Database Connection exists (ADD THIS LINE)
 require_once 'config.php';
 $current = basename($_SERVER['PHP_SELF']);
 
-// Determine the correct dashboard link based on the user's role
-$dashboardLink = 'index.php'; // Default fallback
-
+// 1. Determine Dashboard Link
+$dashboardLink = 'index.php'; 
 if (isset($_SESSION['role'])) {
     switch ($_SESSION['role']) {
-        case 'admin':
-            $dashboardLink = 'admin_page.php';
-            break;
-        case 'reviewer':
-            $dashboardLink = 'reviewer_page.php';
-            break;
-        case 'hod':
-            $dashboardLink = 'hod_page.php';
-            break;
-        case 'researcher':
-            $dashboardLink = 'researcher_page.php';
-            break;
-        default:
-            $dashboardLink = 'index.php';
+        case 'admin': $dashboardLink = 'admin_page.php'; break;
+        case 'reviewer': $dashboardLink = 'reviewer_page.php'; break;
+        case 'hod': $dashboardLink = 'hod_page.php'; break;
+        case 'researcher': $dashboardLink = 'researcher_dashboard.php'; break; // Point to new Dashboard
+        default: $dashboardLink = 'index.php';
     }
 }
+
+// 2. Count Unread Notifications
 $unread_count = 0;
 if (isset($_SESSION['email']) && isset($conn)) {
     $n_stmt = $conn->prepare("SELECT COUNT(*) as count FROM notifications WHERE user_email = ? AND is_read = 0");
@@ -47,20 +36,84 @@ if (isset($_SESSION['email']) && isset($conn)) {
 
     <ul class="nav-list">
         <li>
-            <a href="<?= $dashboardLink ?>" class="<?= $current == $dashboardLink ? 'active' : '' ?>">
+            <a href="<?= $dashboardLink ?>" class="<?= $current == basename($dashboardLink) ? 'active' : '' ?>">
                 <i class='bx bx-grid-alt'></i>
                 <span class="links_name">Dashboard</span>
             </a>
             <span class="tooltip">Dashboard</span>
         </li>
 
-        <li>
-            <a href="researcher_analytics.php" class="<?= basename($_SERVER['PHP_SELF']) == 'researcher_analytics.php' ? 'active' : '' ?>">
-                <i class='bx bx-bar-chart-alt-2'></i>
-                <span class="links_name">Analytics</span>
-            </a>
-            <span class="tooltip">Analytics</span>
-         </li>
+        <?php if (isset($_SESSION['role']) && $_SESSION['role'] == 'researcher'): ?>
+            <li>
+                <a href="researcher_page.php" class="<?= $current == 'researcher_page.php' ? 'active' : '' ?>">
+                    <i class='bx bx-file'></i>
+                    <span class="links_name">My Research</span>
+                </a>
+                <span class="tooltip">My Research</span>
+            </li>
+            <li>
+                <a href="researcher_analytics.php" class="<?= $current == 'researcher_analytics.php' ? 'active' : '' ?>">
+                    <i class='bx bx-bar-chart-alt-2'></i>
+                    <span class="links_name">Analytics</span>
+                </a>
+                <span class="tooltip">Analytics</span>
+            </li>
+        <?php endif; ?>
+
+        <?php if (isset($_SESSION['role']) && $_SESSION['role'] == 'reviewer'): ?>
+            <li>
+                <a href="reviewer_pending.php" class="<?= $current == 'reviewer_pending.php' ? 'active' : '' ?>">
+                    <i class='bx bx-time-five'></i>
+                    <span class="links_name">Pending Tasks</span>
+                </a>
+                <span class="tooltip">Pending Tasks</span>
+            </li>
+            <li>
+                <a href="reviewer_stats.php" class="<?= $current == 'reviewer_stats.php' ? 'active' : '' ?>">
+                    <i class='bx bx-pie-chart-alt-2'></i>
+                    <span class="links_name">Performance</span>
+                </a>
+                <span class="tooltip">Performance</span>
+            </li>
+            <li>
+                <a href="reviewer_history.php" class="<?= $current == 'reviewer_history.php' ? 'active' : '' ?>">
+                    <i class='bx bx-history'></i>
+                    <span class="links_name">History</span>
+                </a>
+                <span class="tooltip">History</span>
+            </li>
+            <li>
+                <a href="reviewer_misconduct.php" class="<?= $current == 'reviewer_misconduct.php' ? 'active' : '' ?>">
+                    <i class='bx bx-error-circle'></i>
+                    <span class="links_name">Misconduct</span>
+                </a>
+                <span class="tooltip">Misconduct</span>
+            </li>
+        <?php endif; ?>
+
+        <?php if (isset($_SESSION['role']) && $_SESSION['role'] == 'hod'): ?>
+            <li>
+                <a href="hod_proposal_management.php" class="<?= $current == 'hod_proposal_management.php' ? 'active' : '' ?>">
+                    <i class='bx bx-list-check'></i>
+                    <span class="links_name">Proposal Management</span>
+                </a>
+                <span class="tooltip">Proposal Management</span>
+            </li>
+            <li>
+                <a href="hod_research_tracking.php" class="<?= $current == 'hod_research_tracking.php' ? 'active' : '' ?>">
+                    <i class='bx bx-bar-chart-alt-2'></i>
+                    <span class="links_name">Research Progress</span>
+                </a>
+                <span class="tooltip">Research Progress</span>
+            </li>
+            <li>
+                <a href="hod_appeal_cases.php" class="<?= $current == 'hod_appeal_cases.php' ? 'active' : '' ?>">
+                    <i class='bx bx-message-square-dots'></i>
+                    <span class="links_name">Appeal Cases</span>
+                </a>
+                <span class="tooltip">Appeal Cases</span>
+            </li>
+        <?php endif; ?>
 
         <li>
             <a href="profile.php" class="<?= $current == 'profile.php' ? 'active' : '' ?>">
@@ -82,7 +135,6 @@ if (isset($_SESSION['email']) && isset($conn)) {
             <a href="notifications.php" class="<?= $current == 'notifications.php' ? 'active' : '' ?>" style="position: relative;">
                 <i class='bx bx-bell'></i>
                 <span class="links_name">Notifications</span>
-                
                 <?php if ($unread_count > 0): ?>
                     <span class="notif-badge"><?= $unread_count ?></span>
                 <?php endif; ?>
@@ -106,16 +158,10 @@ if (isset($_SESSION['email']) && isset($conn)) {
     function toggleSidebar() {
         const sidebar = document.getElementById("sidebar");
         const overlay = document.getElementById("overlay");
-        
-        // 1. Toggle the class 'open' on the sidebar
         sidebar.classList.toggle("open");
-        
-        // 2. Check if the sidebar is now open or closed
         if (sidebar.classList.contains("open")) {
-            // If open, SHOW the overlay
             overlay.style.display = "block";
         } else {
-            // If closed, HIDE the overlay
             overlay.style.display = "none";
         }
     }

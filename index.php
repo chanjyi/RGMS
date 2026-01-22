@@ -21,7 +21,7 @@ if (isset($_SESSION['login_error'])) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Research Grant Management System</title>
-    <link rel="stylesheet" href="loginpage.css">
+    <link rel="stylesheet" href="styling/loginpage.css">
     <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
     <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
 </head>

@@ -1,0 +1,238 @@
+/* ===========================
+   1. DASHBOARD NAVIGATION MENU (General)
+   =========================== */
+.dashboard-header {
+    font-size: 24px;
+    font-weight: 700;
+    color: #153448;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.dashboard-divider {
+    border: 0;
+    height: 1px;
+    background: rgba(0,0,0,0.1);
+    margin-bottom: 30px;
+}
+
+.nav-menu-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 20px;
+}
+
+.nav-card-btn {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #fff;
+    padding: 20px 25px;
+    border-radius: 10px;
+    text-decoration: none;
+    color: #3C5B6F;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+    transition: all 0.3s ease;
+    border-left: 5px solid #3C5B6F; /* Brand Color Accent */
+}
+
+.nav-card-btn:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 15px rgba(0,0,0,0.1);
+    background: #3C5B6F;
+    color: #fff;
+}
+
+.nav-card-btn .nav-text {
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.nav-card-btn i {
+    font-size: 24px;
+}
+
+/* Specific colors for specific roles (Optional) */
+.nav-card-btn.urgent { border-left-color: #dc3545; }
+.nav-card-btn.success { border-left-color: #28a745; }
+
+
+/* ===========================
+   2. SECTION HEADER CARDS (Visuals)
+   =========================== */
+.header-card {
+    background: white;
+    border-radius: 8px;
+    padding: 15px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border: 1px solid #ddd;
+    margin-bottom: 20px;
+    margin-top: 30px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    transition: all 0.3s ease;
+    cursor: pointer;       /* Shows hand cursor */
+    user-select: none;     /* Prevents text highlighting on click */
+}
+
+.header-card:hover {
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    background-color: #fcfcfc;
+}
+
+/* Left side container (Icon + Text) */
+.header-left {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+/* Icon styling */
+.header-icon-box {
+    font-size: 24px;
+    color: #444;
+    display: flex;
+    align-items: center;
+    transition: color 0.3s ease;
+}
+
+/* Text Group */
+.header-text-group h3 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 500;
+    color: #153448;
+}
+
+.header-text-group span {
+    font-size: 13px;
+    color: #666;
+    display: block;
+    margin-top: 3px;
+}
+
+/* Right Arrow */
+.header-arrow {
+    color: #999;
+    font-size: 20px;
+    transition: transform 0.3s ease;
+}
+
+
+/* ===========================
+   3. ACCORDION LOGIC (Functionality)
+   =========================== */
+
+/* Active State (When Section is Open) */
+.header-card.active {
+    background-color: #f8f9fa;
+    border-left: 5px solid #3C5B6F; /* Blue Accent on Left */
+}
+
+.header-card.active .header-arrow {
+    transform: rotate(90deg); /* Rotates arrow down */
+    color: #3C5B6F;
+}
+
+.header-card.active .header-icon-box {
+    color: #3C5B6F; /* Highlight Icon */
+}
+
+/* Content Container (Hidden/Shown) */
+.section-content {
+    display: none; /* Hidden by default */
+    animation: slideDown 0.3s ease-out;
+}
+
+/* Smooth Slide Animation */
+@keyframes slideDown {
+    from { 
+        opacity: 0; 
+        transform: translateY(-10px); 
+    }
+    to { 
+        opacity: 1; 
+        transform: translateY(0); 
+    }
+}
+/* ===========================
+   LINK-STYLE HEADER CARDS
+   =========================== */
+a.header-card {
+    text-decoration: none; /* Remove blue underline */
+    color: inherit;        /* Keep original text colors */
+    display: flex;         /* Maintain the flex layout */
+    width: 100%;           /* Ensure full width */
+    box-sizing: border-box;
+}
+
+a.header-card:hover {
+    background-color: #f8f9fa;
+    transform: translateY(-2px); /* Small lift effect on hover */
+}
+
+/* ===========================
+   NEW DASHBOARD HEADER (Windows Style)
+   =========================== */
+.dashboard-header-group {
+    margin-bottom: 30px;
+    padding-top: 10px;
+}
+
+/* Big "Reviewer Dashboard" Title */
+.main-title {
+    font-size: 36px;
+    font-weight: 700;
+    color: #153448; /* Dark Navy */
+    margin-bottom: 25px;
+}
+
+/* User Info Container */
+.user-identity-row {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+/* Profile Picture (Rounded Square) */
+.identity-img {
+    width: 60px;
+    height: 60px;
+    border-radius: 8px; /* Soft rounded corners */
+    object-fit: cover;
+    background-color: #ccc; /* Placeholder color while loading */
+}
+
+/* Text Container */
+.identity-text {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+/* Username (Bold) */
+.identity-name {
+    font-size: 20px;
+    font-weight: 600;
+    color: #153448;
+}
+
+/* Role (Light, No Background) */
+.identity-role {
+    font-size: 15px;
+    color: #666; /* Light Grey text */
+    font-weight: 400;
+    margin-top: 2px;
+}
+
+/* Divider Line */
+.dashboard-divider {
+    border: 0;
+    height: 1px;
+    background: rgba(60, 91, 111, 0.3);
+    margin-bottom: 35px;
+    margin-top: 10px;
+}

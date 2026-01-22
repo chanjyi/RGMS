@@ -526,7 +526,7 @@ $my_reports = $stmt->get_result();
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Researcher Dashboard</title>
+    <title>Research Management</title>
     <link rel="stylesheet" href="style.css">
     <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
     <style>
@@ -596,8 +596,13 @@ $my_reports = $stmt->get_result();
     <?php include 'sidebar.php'; ?>
     
     <section class="home-section">
+        <a href="researcher_dashboard.php" class="btn-back" style="display: inline-flex; align-items: center; text-decoration: none; color: #3C5B6F; font-weight: 600; margin-bottom: 15px;">
+            <i class='bx bx-left-arrow-alt' style="font-size: 20px; margin-right: 5px;"></i> 
+            Back to Dashboard
+        </a>
+
         <div class="welcome-text">
-            Researcher Dashboard | <?= htmlspecialchars($_SESSION['name']); ?>
+            My Research Management | <?= htmlspecialchars($_SESSION['name']); ?>
         </div>
         <hr style="border: 1px solid #3C5B6F; opacity: 0.3; margin-bottom: 25px;">
 
