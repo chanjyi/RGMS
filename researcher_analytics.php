@@ -299,7 +299,6 @@ while($row = $result->fetch_assoc()) {
     
     <section class="home-section">
         <div class="welcome-text">
-            <i class='bx bx-bar-chart-alt-2' style="font-size:24px; vertical-align:middle;"></i>
             Research Analytics & Statistics | <?php echo htmlspecialchars($_SESSION['name']); ?>
         </div>
         <hr style="border: 1px solid #3C5B6F; opacity: 0.3; margin-bottom: 25px;">
@@ -313,13 +312,13 @@ while($row = $result->fetch_assoc()) {
             
             <div class="stat-card green">
                 <h3><i class='bx bx-dollar-circle'></i> Total Approved</h3>
-                <div class="stat-value">$<?php echo number_format($stats['budget']['total_approved'] ?? 0, 0); ?></div>
+                <div class="stat-value">RM<?php echo number_format($stats['budget']['total_approved'] ?? 0, 0); ?></div>
                 <div class="stat-label">Budget allocated</div>
             </div>
             
             <div class="stat-card orange">
                 <h3><i class='bx bx-receipt'></i> Total Spent</h3>
-                <div class="stat-value">$<?php echo number_format($stats['budget']['total_spent'] ?? 0, 0); ?></div>
+                <div class="stat-value">RM<?php echo number_format($stats['budget']['total_spent'] ?? 0, 0); ?></div>
                 <div class="stat-label">Reimbursed to date</div>
             </div>
             
@@ -340,19 +339,19 @@ while($row = $result->fetch_assoc()) {
             <h4><i class='bx bx-wallet'></i> Budget Overview</h4>
             <div class="summary-stats">
                 <div class="summary-stat">
-                    <div class="value">$<?php echo number_format($stats['budget']['total_requested'] ?? 0, 0); ?></div>
+                    <div class="value">RM<?php echo number_format($stats['budget']['total_requested'] ?? 0, 0); ?></div>
                     <div class="label">Total Requested</div>
                 </div>
                 <div class="summary-stat">
-                    <div class="value">$<?php echo number_format($stats['budget']['total_approved'] ?? 0, 0); ?></div>
+                    <div class="value">RM<?php echo number_format($stats['budget']['total_approved'] ?? 0, 0); ?></div>
                     <div class="label">Total Approved</div>
                 </div>
                 <div class="summary-stat">
-                    <div class="value">$<?php echo number_format($stats['budget']['total_spent'] ?? 0, 0); ?></div>
+                    <div class="value">RM<?php echo number_format($stats['budget']['total_spent'] ?? 0, 0); ?></div>
                     <div class="label">Total Claimed</div>
                 </div>
                 <div class="summary-stat">
-                    <div class="value">$<?php echo number_format(($stats['budget']['total_approved'] ?? 0) - ($stats['budget']['total_spent'] ?? 0), 0); ?></div>
+                    <div class="value">RM<?php echo number_format(($stats['budget']['total_approved'] ?? 0) - ($stats['budget']['total_spent'] ?? 0), 0); ?></div>
                     <div class="label">Remaining Balance</div>
                 </div>
             </div>
@@ -402,13 +401,13 @@ while($row = $result->fetch_assoc()) {
                     </div>
                     <div>
                         <div style="font-size: 28px; font-weight: bold; color: #28a745;">
-                            $<?php echo number_format($stats['expenditures']['approved_amount'] ?? 0, 0); ?>
+                            RM<?php echo number_format($stats['expenditures']['approved_amount'] ?? 0, 0); ?>
                         </div>
                         <div style="font-size: 12px; color: #666;">Approved Claims</div>
                     </div>
                     <div>
                         <div style="font-size: 28px; font-weight: bold; color: #ffc107;">
-                            $<?php echo number_format($stats['expenditures']['pending_amount'] ?? 0, 0); ?>
+                            RM<?php echo number_format($stats['expenditures']['pending_amount'] ?? 0, 0); ?>
                         </div>
                         <div style="font-size: 12px; color: #666;">Pending Claims</div>
                     </div>
@@ -425,7 +424,7 @@ while($row = $result->fetch_assoc()) {
                     <div style="margin-bottom: 20px;">
                         <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
                             <strong><?php echo $cat['category']; ?></strong>
-                            <span style="color: #666;">$<?php echo number_format($cat['spent'], 2); ?> / $<?php echo number_format($cat['allocated'], 2); ?></span>
+                            <span style="color: #666;">RM<?php echo number_format($cat['spent'], 2); ?> / RM<?php echo number_format($cat['allocated'], 2); ?></span>
                         </div>
                         <div class="category-bar">
                             <div class="category-fill" style="width: <?php echo min($percentage, 100); ?>%;">
@@ -516,7 +515,7 @@ while($row = $result->fetch_assoc()) {
                     scales: {
                         y: { 
                             beginAtZero: true,
-                            ticks: { callback: function(val) { return '$' + val; }, font: { size: 9 } }
+                            ticks: { callback: function(val) { return 'RM' + val; }, font: { size: 9 } }
                         },
                         x: { ticks: { font: { size: 9 } } }
                     },

@@ -345,7 +345,7 @@ if (isset($_POST['log_expenditure'])) {
             
             // Check if amount exceeds remaining budget
             if ($amount > $remaining) {
-                $message = "Expenditure amount ($" . number_format($amount, 2) . ") exceeds remaining budget ($" . number_format($remaining, 2) . ") for this category.";
+                $message = "Expenditure amount (RM" . number_format($amount, 2) . ") exceeds remaining budget (RM" . number_format($remaining, 2) . ") for this category.";
                 $messageType = "error";
             } else {
                 // Handle receipt upload
@@ -474,7 +474,7 @@ if (isset($_POST['request_reimbursement'])) {
                             $link_stmt->execute();
                         }
                         
-                        notifySystem($conn, 'hod', "Reimbursement Request: $email requests $" . number_format($total_claim, 2) . " for Grant #$grant_id");
+                        notifySystem($conn, 'hod', "Reimbursement Request: $email requests RM" . number_format($total_claim, 2) . " for Grant #$grant_id");
                         $message = "Reimbursement request submitted successfully!";
                         $messageType = "success";
                     } else {
@@ -597,7 +597,6 @@ $my_reports = $stmt->get_result();
     
     <section class="home-section">
         <div class="welcome-text">
-            <i class='bx bx-user-circle' style="font-size:24px; vertical-align:middle;"></i>
             Researcher Dashboard | <?= htmlspecialchars($_SESSION['name']); ?>
         </div>
         <hr style="border: 1px solid #3C5B6F; opacity: 0.3; margin-bottom: 25px;">
@@ -647,7 +646,7 @@ $my_reports = $stmt->get_result();
                             <input type="number" name="duration_months" min="1" max="60" required placeholder="12">
                         </div>
                         <div class="input-group">
-                            <label>Total Budget Requested ($) *</label>
+                            <label>Total Budget Requested (RM) *</label>
                             <input type="number" name="budget_requested" step="0.01" min="0" required placeholder="0.00" id="totalBudget" readonly>
                         </div>
                     </div>
@@ -655,25 +654,25 @@ $my_reports = $stmt->get_result();
                     <h4 style="color:#3C5B6F; margin-top:20px;">Budget Breakdown by Category</h4>
                     <div class="grid-3">
                         <div class="input-group">
-                            <label>Equipment ($)</label>
+                            <label>Equipment (RM)</label>
                             <input type="number" name="budget_equipment" step="0.01" min="0" value="0" class="budget-category" onchange="calculateTotal()">
                         </div>
                         <div class="input-group">
-                            <label>Materials ($)</label>
+                            <label>Materials (RM)</label>
                             <input type="number" name="budget_materials" step="0.01" min="0" value="0" class="budget-category" onchange="calculateTotal()">
                         </div>
                         <div class="input-group">
-                            <label>Travel ($)</label>
+                            <label>Travel (RM)</label>
                             <input type="number" name="budget_travel" step="0.01" min="0" value="0" class="budget-category" onchange="calculateTotal()">
                         </div>
                     </div>
                     <div class="grid-2">
                         <div class="input-group">
-                            <label>Personnel ($)</label>
+                            <label>Personnel (RM)</label>
                             <input type="number" name="budget_personnel" step="0.01" min="0" value="0" class="budget-category" onchange="calculateTotal()">
                         </div>
                         <div class="input-group">
-                            <label>Other Expenses ($)</label>
+                            <label>Other Expenses (RM)</label>
                             <input type="number" name="budget_other" step="0.01" min="0" value="0" class="budget-category" onchange="calculateTotal()">
                         </div>
                     </div>
@@ -707,7 +706,6 @@ $my_reports = $stmt->get_result();
             <table class="styled-table">
                 <thead>
                     <tr>
-                        <th>ID</th>
                         <th>Title</th>
                         <th>Status</th>
                         <th>Budget Requested</th>
@@ -719,7 +717,6 @@ $my_reports = $stmt->get_result();
                 <tbody>
                     <?php while($row = $my_props->fetch_assoc()): ?>
                         <tr>
-                            <td><?= $row['id'] ?></td>
                             <td style="max-width:250px;">
                                 <strong><?= htmlspecialchars($row['title']) ?></strong>
                                 <?php if($row['duration_months']): ?>
@@ -731,7 +728,7 @@ $my_reports = $stmt->get_result();
                                     <?= str_replace('_', ' ', $row['status']) ?>
                                 </span>
                             </td>
-                            <td>$<?= number_format($row['budget_requested'], 2) ?></td>
+                            <td>RM<?= number_format($row['budget_requested'], 2) ?></td>
                             <td style="font-size:12px; color:#555; max-width:200px;">
                                 <?php if(!empty($row['feedback'])): ?>
                                     <?= htmlspecialchars(substr($row['feedback'], 0, 100)) ?>
@@ -794,21 +791,21 @@ $my_reports = $stmt->get_result();
                             <i class='bx bx-file-blank'></i> <?= htmlspecialchars($grant['title']) ?>
                         </h4>
                         <p style="color:#666; font-size:13px; margin:5px 0;">
-                            Grant ID: #<?= $grant['id'] ?> | Approved: <?= date('M d, Y', strtotime($grant['approved_at'])) ?>
+                            Approved: <?= date('M d, Y', strtotime($grant['approved_at'])) ?>
                         </p>
                         
                         <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:15px; margin:15px 0;">
                             <div>
                                 <strong style="color:#28a745;">Total Allocated:</strong><br>
-                                <span style="font-size:20px; font-weight:bold;">$<?= number_format($budget, 2) ?></span>
+                                <span style="font-size:20px; font-weight:bold;">RM<?= number_format($budget, 2) ?></span>
                             </div>
                             <div>
                                 <strong style="color:#dc3545;">Reimbursed:</strong><br>
-                                <span style="font-size:20px; font-weight:bold;">$<?= number_format($spent, 2) ?></span>
+                                <span style="font-size:20px; font-weight:bold;">RM<?= number_format($spent, 2) ?></span>
                             </div>
                             <div>
                                 <strong style="color:#17a2b8;">Remaining:</strong><br>
-                                <span style="font-size:20px; font-weight:bold;">$<?= number_format($remaining, 2) ?></span>
+                                <span style="font-size:20px; font-weight:bold;">RM<?= number_format($remaining, 2) ?></span>
                             </div>
                         </div>
                         
@@ -832,8 +829,8 @@ $my_reports = $stmt->get_result();
                                 <div class="budget-item">
                                     <strong><?= $item['category'] ?></strong><br>
                                     <small style="color:#666;">
-                                        Claimed: $<?= number_format($item['spent_amount'], 2) ?><br>
-                                        Allocated: $<?= number_format($item['allocated_amount'], 2) ?>
+                                        Claimed: RM<?= number_format($item['spent_amount'], 2) ?><br>
+                                        Allocated: RM<?= number_format($item['allocated_amount'], 2) ?>
                                     </small><br>
                                     <div style="background:#e9ecef; height:8px; border-radius:5px; margin-top:5px; overflow:hidden;">
                                         <div style="background:#3C5B6F; height:100%; width:<?= min($item_percentage, 100) ?>%;"></div>
@@ -914,7 +911,7 @@ $my_reports = $stmt->get_result();
                             ?>
                                 <option value="<?= $grant['id'] ?>">
                                     <?= htmlspecialchars($grant['title']) ?> 
-                                    (Grant #<?= $grant['id'] ?> - Remaining: $<?= number_format($remaining, 2) ?>)
+                                    (Remaining: RM<?= number_format($remaining, 2) ?>)
                                 </option>
                             <?php endwhile; ?>
                         </select>
@@ -928,7 +925,7 @@ $my_reports = $stmt->get_result();
                             </select>
                         </div>
                         <div class="input-group">
-                            <label>Amount Spent ($) *</label>
+                            <label>Amount Spent (RM) *</label>
                             <input type="number" name="expenditure_amount" step="0.01" min="0.01" required placeholder="0.00">
                         </div>
                     </div>
@@ -970,7 +967,7 @@ $my_reports = $stmt->get_result();
                         while($grant = $active_grants_result->fetch_assoc()): 
                         ?>
                             <option value="<?= $grant['id'] ?>">
-                                <?= htmlspecialchars($grant['title']) ?> (Grant #<?= $grant['id'] ?>)
+                                <?= htmlspecialchars($grant['title']) ?>
                             </option>
                         <?php endwhile; ?>
                     </select>
@@ -1009,7 +1006,7 @@ $my_reports = $stmt->get_result();
                                                         <i class='bx bx-file-blank'></i> <?= htmlspecialchars($exp['grant_title']) ?>
                                                     </small>
                                                 </div>
-                                                <span style="font-size:20px; font-weight:bold; color:#28a745;">$<?= number_format($exp['amount'], 2) ?></span>
+                                                <span style="font-size:20px; font-weight:bold; color:#28a745;">RM<?= number_format($exp['amount'], 2) ?></span>
                                             </div>
                                             <p style="margin:5px 0; color:#666; font-size:13px;">
                                                 <i class='bx bx-calendar'></i> <?= date('M d, Y', strtotime($exp['transaction_date'])) ?>
@@ -1027,7 +1024,7 @@ $my_reports = $stmt->get_result();
                         </div>
                         
                         <div style="background:#fff3cd; padding:15px; border-radius:5px; margin:15px 0;">
-                            <strong>Total Amount to Claim: <span id="totalClaim" style="font-size:20px; color:#28a745;">$0.00</span></strong>
+                            <strong>Total Amount to Claim: <span id="totalClaim" style="font-size:20px; color:#28a745;">RM0.00</span></strong>
                             <br>
                             <small id="selectedGrantInfo" style="color:#856404;"></small>
                         </div>
@@ -1083,10 +1080,9 @@ $my_reports = $stmt->get_result();
                                 <tr>
                                     <td style="font-size:13px; color:#3C5B6F;">
                                         <strong><?= htmlspecialchars($req['grant_title']) ?></strong>
-                                        <br><small style="color:#999;">Grant #<?= $req['grant_id'] ?></small>
                                     </td>
                                     <td><?= date('M d, Y', strtotime($req['requested_at'])) ?></td>
-                                    <td><strong style="color:#28a745;">$<?= number_format($req['total_amount'], 2) ?></strong></td>
+                                    <td><strong style="color:#28a745;">RM<?= number_format($req['total_amount'], 2) ?></strong></td>
                                     <td>
                                         <span class="status-badge <?= strtolower($req['status']) ?>">
                                             <?= $req['status'] ?>
@@ -1115,70 +1111,6 @@ $my_reports = $stmt->get_result();
             <?php endif; ?>
         </div>
 
-        <script>
-        // Load budget categories dynamically when grant is selected
-        function loadBudgetCategories(grantId) {
-            const categorySelector = document.getElementById('budgetCategorySelector');
-            
-            if (!grantId) {
-                categorySelector.innerHTML = '<option value="">Select a grant first...</option>';
-                categorySelector.disabled = true;
-                return;
-            }
-            
-            // Show loading state
-            categorySelector.innerHTML = '<option value="">Loading categories...</option>';
-            categorySelector.disabled = true;
-            
-            // Fetch budget categories via AJAX
-            fetch('get_budget_categories.php?grant_id=' + grantId)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.error) {
-                        categorySelector.innerHTML = '<option value="">Error loading categories</option>';
-                        return;
-                    }
-                    
-                    if (data.length === 0) {
-                        categorySelector.innerHTML = '<option value="">No budget categories available</option>';
-                        return;
-                    }
-                    
-                    // Populate dropdown
-                    let html = '<option value="">Select Category</option>';
-                    data.forEach(item => {
-                        const remaining = parseFloat(item.allocated_amount) - parseFloat(item.spent_amount);
-                        html += `<option value="${item.id}">${item.category} (Remaining: $${remaining.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')})</option>`;
-                    });
-                    
-                    categorySelector.innerHTML = html;
-                    categorySelector.disabled = false;
-                })
-                .catch(error => {
-                    console.error('Error loading categories:', error);
-                    categorySelector.innerHTML = '<option value="">Error loading categories</option>';
-                });
-        }
-
-        // Filter expenditures by grant
-        function filterExpenditures(grantId) {
-            const cards = document.querySelectorAll('.expenditure-card');
-            
-            cards.forEach(card => {
-                if (!grantId || card.dataset.grantId === grantId) {
-                    card.style.display = 'block';
-                } else {
-                    card.style.display = 'none';
-                    // Uncheck hidden checkboxes
-                    const checkbox = card.querySelector('.reimburse-checkbox');
-                    if (checkbox) checkbox.checked = false;
-                }
-            });
-            
-            updateTotal();
-        }
-        </script>
-
         <div id="reports" class="tab-content">
             <h3 style="color:#3C5B6F; margin-top:0;">
                 <i class='bx bx-bar-chart-alt-2'></i> My Progress Reports
@@ -1187,7 +1119,6 @@ $my_reports = $stmt->get_result();
             <table class="styled-table">
                 <thead>
                     <tr>
-                        <th>ID</th>
                         <th>Grant</th>
                         <th>Title</th>
                         <th>Deadline</th>
@@ -1203,7 +1134,6 @@ $my_reports = $stmt->get_result();
                             $is_overdue = strtotime($rep['deadline']) < strtotime(date('Y-m-d')) && $rep['status'] == 'PENDING_REVIEW';
                     ?>
                         <tr <?= $is_overdue ? 'style="background:#fff3cd;"' : '' ?>>
-                            <td>#<?= $rep['id'] ?></td>
                             <td><?= htmlspecialchars($rep['grant_title']) ?></td>
                             <td><?= htmlspecialchars($rep['title']) ?></td>
                             <td style="font-size:12px;">
@@ -1497,7 +1427,7 @@ $my_reports = $stmt->get_result();
         });
         
         // 3. Update Visual Total
-        const formatted = '$' + total.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+        const formatted = 'RM' + total.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
         const totalEl = document.getElementById('totalClaim');
         if (totalEl) totalEl.textContent = formatted;
         
@@ -1516,7 +1446,8 @@ $my_reports = $stmt->get_result();
             if(grantIdInput) grantIdInput.value = '';
         } else {
             if(infoElement) {
-                infoElement.textContent = `Claiming for Grant #${selectedGrantId}`;
+                // FIXED: REMOVED GRANT ID DISPLAY
+                infoElement.textContent = `Claiming for Selected Grant`;
                 infoElement.style.color = '#856404';
             }
             // THIS SETS THE ID FOR THE PHP SCRIPT
