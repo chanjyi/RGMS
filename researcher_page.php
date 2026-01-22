@@ -26,7 +26,7 @@ function notifySystem($conn, $role, $msg) {
 }
 
 // =========================================================
-// USE CASE 7: SUBMIT PROPOSAL WITH BUDGET BREAKDOWN & MILESTONES
+// USE CASE 7: SUBMIT PROPOSAL
 // =========================================================
 if (isset($_POST['submit_proposal'])) {
     $title = mysqli_real_escape_string($conn, $_POST['title']);
@@ -34,14 +34,12 @@ if (isset($_POST['submit_proposal'])) {
     $duration_months = intval($_POST['duration_months']);
     $budget_requested = floatval($_POST['budget_requested']);
     
-    // Budget breakdown by category
     $budget_equipment = floatval($_POST['budget_equipment'] ?? 0);
     $budget_materials = floatval($_POST['budget_materials'] ?? 0);
     $budget_travel = floatval($_POST['budget_travel'] ?? 0);
     $budget_personnel = floatval($_POST['budget_personnel'] ?? 0);
     $budget_other = floatval($_POST['budget_other'] ?? 0);
     
-    // Milestones
     $milestone_titles = $_POST['milestone_title'] ?? [];
     $milestone_descs = $_POST['milestone_desc'] ?? [];
     $milestone_dates = $_POST['milestone_date'] ?? [];
@@ -60,14 +58,12 @@ if (isset($_POST['submit_proposal'])) {
         $messageType = "error";
     } else {
         if (move_uploaded_file($_FILES["proposal_file"]["tmp_name"], $target_file)) {
-            // Insert proposal
             $stmt = $conn->prepare("INSERT INTO proposals (title, description, researcher_email, file_path, budget_requested, duration_months, status) VALUES (?, ?, ?, ?, ?, ?, 'SUBMITTED')");
             $stmt->bind_param("ssssdi", $title, $description, $email, $target_file, $budget_requested, $duration_months);
             
             if ($stmt->execute()) {
                 $proposal_id = $conn->insert_id;
                 
-                // Insert budget breakdown into budget_items table
                 $categories = [
                     'Equipment' => $budget_equipment,
                     'Materials' => $budget_materials,
@@ -85,7 +81,6 @@ if (isset($_POST['submit_proposal'])) {
                     }
                 }
                 
-                // Insert milestones
                 for ($i = 0; $i < count($milestone_titles); $i++) {
                     if (!empty($milestone_titles[$i]) && !empty($milestone_dates[$i])) {
                         $m_stmt = $conn->prepare("INSERT INTO milestones (grant_id, title, description, target_date, status) VALUES (?, ?, ?, ?, 'PENDING')");
@@ -94,7 +89,6 @@ if (isset($_POST['submit_proposal'])) {
                     }
                 }
                 
-                // Create initial document version
                 $version_stmt = $conn->prepare("INSERT INTO document_versions (proposal_id, version_number, file_path, uploaded_by) VALUES (?, 'v1.0', ?, ?)");
                 $version_stmt->bind_param("iss", $proposal_id, $target_file, $email);
                 $version_stmt->execute();
@@ -111,7 +105,7 @@ if (isset($_POST['submit_proposal'])) {
 }
 
 // =========================================================
-// DELETE DRAFT PROPOSAL (USE CASE 7)
+// DELETE DRAFT PROPOSAL
 // =========================================================
 if (isset($_POST['delete_proposal'])) {
     $prop_id = intval($_POST['proposal_id']);
@@ -124,11 +118,9 @@ if (isset($_POST['delete_proposal'])) {
     if ($result->num_rows > 0) {
         $prop = $result->fetch_assoc();
         if (in_array($prop['status'], ['DRAFT', 'SUBMITTED'])) {
-            // Delete file
             if (file_exists($prop['file_path'])) {
                 unlink($prop['file_path']);
             }
-            // Delete from database (CASCADE will handle related records)
             $delete = $conn->prepare("DELETE FROM proposals WHERE id = ?");
             $delete->bind_param("i", $prop_id);
             if ($delete->execute()) {
@@ -143,7 +135,7 @@ if (isset($_POST['delete_proposal'])) {
 }
 
 // =========================================================
-// USE CASE 11: AMEND PROPOSAL
+// AMEND PROPOSAL
 // =========================================================
 if (isset($_POST['amend_proposal'])) {
     $prop_id = intval($_POST['proposal_id']);
@@ -160,19 +152,16 @@ if (isset($_POST['amend_proposal'])) {
         $messageType = "error";
     } else {
         if (move_uploaded_file($_FILES["amend_file"]["tmp_name"], $target_file)) {
-            // Get current version number and increment
             $version_query = $conn->prepare("SELECT MAX(CAST(SUBSTRING(version_number, 2) AS DECIMAL(10,2))) as max_ver FROM document_versions WHERE proposal_id = ?");
             $version_query->bind_param("i", $prop_id);
             $version_query->execute();
             $ver_result = $version_query->get_result()->fetch_assoc();
             $new_version = "v" . number_format($ver_result['max_ver'] + 0.1, 1);
             
-            // Insert new version
             $version_stmt = $conn->prepare("INSERT INTO document_versions (proposal_id, version_number, file_path, uploaded_by, change_notes) VALUES (?, ?, ?, ?, ?)");
             $version_stmt->bind_param("issss", $prop_id, $new_version, $target_file, $email, $amendment_notes);
             $version_stmt->execute();
             
-            // Update proposal
             $stmt = $conn->prepare("UPDATE proposals SET file_path = ?, status = 'RESUBMITTED', amendment_notes = ?, resubmitted_at = NOW() WHERE id = ? AND researcher_email = ?");
             $stmt->bind_param("ssis", $target_file, $amendment_notes, $prop_id, $email);
             
@@ -186,13 +175,12 @@ if (isset($_POST['amend_proposal'])) {
 }
 
 // =========================================================
-// USE CASE 10: APPEAL PROPOSAL REJECTION
+// APPEAL PROPOSAL
 // =========================================================
 if (isset($_POST['appeal_proposal'])) {
     $prop_id = intval($_POST['proposal_id']);
     $justification = mysqli_real_escape_string($conn, $_POST['justification']);
     
-    // Verify that proposal is REJECTED and reviewer decision is "REJECT"
     $check = $conn->prepare("SELECT p.status, r.decision FROM proposals p LEFT JOIN reviews r ON p.id = r.proposal_id WHERE p.id = ? AND p.researcher_email = ?");
     $check->bind_param("is", $prop_id, $email);
     $check->execute();
@@ -202,17 +190,14 @@ if (isset($_POST['appeal_proposal'])) {
         $prop = $result->fetch_assoc();
         
         if ($prop['status'] == 'REJECTED' && $prop['decision'] == 'REJECT') {
-            // Insert appeal with detailed justification
             $stmt = $conn->prepare("INSERT INTO appeal_requests (proposal_id, researcher_email, justification, status, submitted_at) VALUES (?, ?, ?, 'PENDING', NOW())");
             $stmt->bind_param("iss", $prop_id, $email, $justification);
             
             if ($stmt->execute()) {
-                // Lock proposal status to 'APPEALED' (Under Appeal)
                 $update = $conn->prepare("UPDATE proposals SET status = 'APPEALED' WHERE id = ?");
                 $update->bind_param("i", $prop_id);
                 $update->execute();
 
-                // Route to HOD for validation
                 notifySystem($conn, 'hod', "Appeal Request: $email has contested rejection of Proposal #$prop_id. Please review and potentially reassign to a new reviewer.");
                 
                 $message = "Appeal submitted successfully with your justification. The Head of Department will review your case."; 
@@ -229,7 +214,7 @@ if (isset($_POST['appeal_proposal'])) {
 }
 
 // =========================================================
-// USE CASE 8: SUBMIT PROGRESS REPORT
+// SUBMIT PROGRESS REPORT
 // =========================================================
 if (isset($_POST['submit_report'])) {
     $grant_id = intval($_POST['grant_id']);
@@ -237,7 +222,7 @@ if (isset($_POST['submit_report'])) {
     $achievements = mysqli_real_escape_string($conn, $_POST['achievements']);
     $challenges = mysqli_real_escape_string($conn, $_POST['challenges']);
     $deadline = $_POST['report_deadline'];
-    $milestone_ids = $_POST['milestones'] ?? []; // Array of completed milestone IDs
+    $milestone_ids = $_POST['milestones'] ?? [];
     
     $target_dir = "uploads/reports/";
     if (!is_dir($target_dir)) mkdir($target_dir, 0777, true);
@@ -251,9 +236,7 @@ if (isset($_POST['submit_report'])) {
         $message = "Error: Only PDF files allowed for evidence."; 
         $messageType = "error";
     } else {
-        // Check submission date against deadline
         $submission_date = date('Y-m-d');
-        
         if (strtotime($submission_date) > strtotime($deadline)) {
             $message = "Warning: Report submitted past deadline. Extension may be required."; 
             $messageType = "error";
@@ -264,14 +247,12 @@ if (isset($_POST['submit_report'])) {
             $stmt->bind_param("issssss", $grant_id, $email, $rep_title, $achievements, $challenges, $target_file, $deadline);
             
             if ($stmt->execute()) {
-                // Mark selected milestones as completed
                 foreach ($milestone_ids as $milestone_id) {
                     $mile_update = $conn->prepare("UPDATE milestones SET status = 'COMPLETED', completion_date = CURDATE() WHERE id = ? AND grant_id = ?");
                     $mile_update->bind_param("ii", $milestone_id, $grant_id);
                     $mile_update->execute();
                 }
                 
-                // Forward to HOD for monitoring
                 notifySystem($conn, 'hod', "New Progress Report submitted by $email for Grant #$grant_id: '$rep_title'");
                 $message = "Progress Report uploaded successfully and forwarded to Head of Department for review."; 
                 $messageType = "success";
@@ -284,14 +265,13 @@ if (isset($_POST['submit_report'])) {
 }
 
 // =========================================================
-// USE CASE 12: REQUEST DEADLINE EXTENSION
+// REQUEST EXTENSION
 // =========================================================
 if (isset($_POST['request_extension'])) {
     $report_id = intval($_POST['report_id']);
     $new_date = $_POST['new_date'];
     $reason = mysqli_real_escape_string($conn, $_POST['justification']);
 
-    // Validate that new date is in the future
     if (strtotime($new_date) <= strtotime(date('Y-m-d'))) {
         $message = "New deadline must be a future date."; 
         $messageType = "error";
@@ -300,7 +280,6 @@ if (isset($_POST['request_extension'])) {
         $stmt->bind_param("isss", $report_id, $email, $new_date, $reason);
         
         if ($stmt->execute()) {
-            // Forward to HOD for approval
             notifySystem($conn, 'hod', "Deadline Extension Request: $email requests extension for Report #$report_id to $new_date. Reason: $reason");
             $message = "Extension request submitted to Head of Department for approval."; 
             $messageType = "success";
@@ -312,7 +291,7 @@ if (isset($_POST['request_extension'])) {
 }
 
 // =========================================================
-// LOG EXPENDITURE (OUT-OF-POCKET SPENDING)
+// LOG EXPENDITURE
 // =========================================================
 if (isset($_POST['log_expenditure'])) {
     $grant_id = intval($_POST['grant_id']);
@@ -321,7 +300,6 @@ if (isset($_POST['log_expenditure'])) {
     $trans_date = $_POST['transaction_date'];
     $exp_description = mysqli_real_escape_string($conn, $_POST['expenditure_description']);
     
-    // Verify the grant belongs to this researcher and is approved
     $verify_grant = $conn->prepare("SELECT id FROM proposals WHERE id = ? AND researcher_email = ? AND status = 'APPROVED'");
     $verify_grant->bind_param("is", $grant_id, $email);
     $verify_grant->execute();
@@ -330,7 +308,6 @@ if (isset($_POST['log_expenditure'])) {
         $message = "Invalid grant selected or grant not approved.";
         $messageType = "error";
     } else {
-        // Verify budget item belongs to this grant
         $verify_budget = $conn->prepare("SELECT allocated_amount, spent_amount FROM budget_items WHERE id = ? AND proposal_id = ?");
         $verify_budget->bind_param("ii", $budget_item_id, $grant_id);
         $verify_budget->execute();
@@ -343,12 +320,10 @@ if (isset($_POST['log_expenditure'])) {
             $budget_item = $budget_result->fetch_assoc();
             $remaining = $budget_item['allocated_amount'] - $budget_item['spent_amount'];
             
-            // Check if amount exceeds remaining budget
             if ($amount > $remaining) {
                 $message = "Expenditure amount (RM" . number_format($amount, 2) . ") exceeds remaining budget (RM" . number_format($remaining, 2) . ") for this category.";
                 $messageType = "error";
             } else {
-                // Handle receipt upload
                 $receipt_path = null;
                 if (isset($_FILES['receipt_file']) && $_FILES['receipt_file']['size'] > 0) {
                     $receipt_dir = "uploads/receipts/";
@@ -372,9 +347,7 @@ if (isset($_POST['log_expenditure'])) {
                     }
                 }
                 
-                // Only insert if no errors and receipt uploaded successfully
                 if ($messageType !== "error") {
-                    // Insert expenditure (status = PENDING_REIMBURSEMENT)
                     $stmt = $conn->prepare("INSERT INTO expenditures (budget_item_id, amount, transaction_date, description, receipt_path, status) VALUES (?, ?, ?, ?, ?, 'PENDING_REIMBURSEMENT')");
                     $stmt->bind_param("idsss", $budget_item_id, $amount, $trans_date, $exp_description, $receipt_path);
                     
@@ -384,8 +357,6 @@ if (isset($_POST['log_expenditure'])) {
                     } else {
                         $message = "Error logging expenditure: " . $conn->error; 
                         $messageType = "error";
-                        
-                        // Clean up uploaded file if DB insert fails
                         if ($receipt_path && file_exists($receipt_path)) {
                             unlink($receipt_path);
                         }
@@ -397,61 +368,43 @@ if (isset($_POST['log_expenditure'])) {
 }
 
 // =========================================================
-// REQUEST FUND REIMBURSEMENT (SMART FIX)
+// REQUEST REIMBURSEMENT
 // =========================================================
 if (isset($_POST['request_reimbursement'])) {
     $grant_id = isset($_POST['grant_id']) ? intval($_POST['grant_id']) : 0;
     $expenditure_ids = $_POST['expenditure_ids'] ?? [];
     $justification = mysqli_real_escape_string($conn, $_POST['reimbursement_justification']);
     
-    // 1. Check if expenditures are selected
     if (empty($expenditure_ids)) {
         $message = "Please select at least one expenditure to claim.";
         $messageType = "error";
     } else {
-        // 2. FALLBACK: If Grant ID is missing (0), find it from the database
         if ($grant_id <= 0) {
-            // Get the first expenditure ID to find the associated grant
             $first_exp_id = intval($expenditure_ids[0]);
-            $find_grant = $conn->prepare("
-                SELECT b.proposal_id 
-                FROM expenditures e 
-                JOIN budget_items b ON e.budget_item_id = b.id 
-                WHERE e.id = ? LIMIT 1
-            ");
+            $find_grant = $conn->prepare("SELECT b.proposal_id FROM expenditures e JOIN budget_items b ON e.budget_item_id = b.id WHERE e.id = ? LIMIT 1");
             $find_grant->bind_param("i", $first_exp_id);
             $find_grant->execute();
             $grant_result = $find_grant->get_result();
-            
             if ($row = $grant_result->fetch_assoc()) {
                 $grant_id = intval($row['proposal_id']);
             }
         }
 
-        // 3. Final Validation
         if ($grant_id <= 0) {
             $message = "Error: Unable to identify the Grant. Please ensure you have selected valid expenditures.";
             $messageType = "error";
         } else {
-            // Calculate total claim amount
             $total_claim = 0;
             $clean_ids = array_map('intval', $expenditure_ids);
             $exp_ids_str = implode(',', $clean_ids);
             
-            // Verify all items belong to this grant (Security Check)
-            $check_consistency = $conn->query("
-                SELECT COUNT(DISTINCT b.proposal_id) as grant_count 
-                FROM expenditures e 
-                JOIN budget_items b ON e.budget_item_id = b.id 
-                WHERE e.id IN ($exp_ids_str)
-            ");
+            $check_consistency = $conn->query("SELECT COUNT(DISTINCT b.proposal_id) as grant_count FROM expenditures e JOIN budget_items b ON e.budget_item_id = b.id WHERE e.id IN ($exp_ids_str)");
             $consistency_row = $check_consistency->fetch_assoc();
             
             if ($consistency_row['grant_count'] > 1) {
                 $message = "Error: You cannot combine expenditures from different grants in one request.";
                 $messageType = "error";
             } else {
-                // Calculate Total
                 $calc_query = $conn->query("SELECT SUM(amount) as total FROM expenditures WHERE id IN ($exp_ids_str) AND status='PENDING_REIMBURSEMENT'");
                 $total_row = $calc_query->fetch_assoc();
                 $total_claim = $total_row['total'] ?? 0;
@@ -460,14 +413,11 @@ if (isset($_POST['request_reimbursement'])) {
                     $message = "Error: Total claim amount is zero or items already processed.";
                     $messageType = "error";
                 } else {
-                    // Create Request
                     $stmt = $conn->prepare("INSERT INTO reimbursement_requests (grant_id, researcher_email, total_amount, justification, status, requested_at) VALUES (?, ?, ?, ?, 'PENDING', NOW())");
                     $stmt->bind_param("isds", $grant_id, $email, $total_claim, $justification);
                     
                     if ($stmt->execute()) {
                         $request_id = $conn->insert_id;
-                        
-                        // Link expenditures
                         $link_stmt = $conn->prepare("UPDATE expenditures SET reimbursement_request_id = ?, status = 'UNDER_REVIEW' WHERE id = ?");
                         foreach ($clean_ids as $exp_id) {
                             $link_stmt->bind_param("ii", $request_id, $exp_id);
@@ -491,8 +441,8 @@ if (isset($_POST['request_reimbursement'])) {
 // DATA FETCHING FOR DASHBOARD
 // =========================================================
 
-// Fetch all proposals with review details
-$sql_props = "SELECT p.*, r.decision as reviewer_decision, r.feedback 
+// Fetch proposals + Reviewer Annotations
+$sql_props = "SELECT p.*, r.decision as reviewer_decision, r.feedback, r.annotated_file 
               FROM proposals p 
               LEFT JOIN reviews r ON p.id = r.proposal_id 
               WHERE p.researcher_email = ? 
@@ -502,14 +452,12 @@ $stmt->bind_param("s", $email);
 $stmt->execute();
 $my_props = $stmt->get_result();
 
-// Fetch approved grants for budget tracking
 $sql_grants = "SELECT * FROM proposals WHERE researcher_email = ? AND status = 'APPROVED' ORDER BY approved_at DESC";
 $stmt = $conn->prepare($sql_grants);
 $stmt->bind_param("s", $email);
 $stmt->execute();
 $my_grants = $stmt->get_result();
 
-// Fetch progress reports
 $sql_reports = "SELECT pr.*, p.title as grant_title 
                 FROM progress_reports pr 
                 JOIN proposals p ON pr.proposal_id = p.id 
@@ -727,6 +675,10 @@ $my_reports = $stmt->get_result();
                                 <?php if($row['duration_months']): ?>
                                     <br><small style="color:#666;"><?= $row['duration_months'] ?> months</small>
                                 <?php endif; ?>
+                                <br>
+                                <a href="<?= htmlspecialchars($row['file_path']) ?>" target="_blank" style="color: #3C5B6F; font-size: 12px; font-weight: 600;">
+                                    <i class='bx bx-file'></i> View Proposal
+                                </a>
                             </td>
                             <td>
                                 <span class="status-badge <?= strtolower($row['status']) ?>">
@@ -740,6 +692,14 @@ $my_reports = $stmt->get_result();
                                     <?= strlen($row['feedback']) > 100 ? '...' : '' ?>
                                 <?php else: ?>
                                     <em style="color:#999;">No feedback yet</em>
+                                <?php endif; ?>
+                                
+                                <?php if (!empty($row['annotated_file'])): ?>
+                                    <div style="margin-top: 5px;">
+                                        <a href="<?= htmlspecialchars($row['annotated_file']) ?>" target="_blank" style="color: #dc3545; font-weight: 600;">
+                                            <i class='bx bx-edit'></i> View Annotations
+                                        </a>
+                                    </div>
                                 <?php endif; ?>
                             </td>
                             <td style="font-size:12px;"><?= date('M d, Y', strtotime($row['created_at'])) ?></td>
@@ -1017,8 +977,9 @@ $my_reports = $stmt->get_result();
                                                 <i class='bx bx-calendar'></i> <?= date('M d, Y', strtotime($exp['transaction_date'])) ?>
                                             </p>
                                             <p style="margin:5px 0; color:#555;"><?= htmlspecialchars($exp['description']) ?></p>
+                                            
                                             <?php if($exp['receipt_path']): ?>
-                                                <a href="<?= $exp['receipt_path'] ?>" target="_blank" style="color:#3C5B6F; font-size:13px; text-decoration:none;">
+                                                <a href="<?= $exp['receipt_path'] ?>" target="_blank" style="color:#3C5B6F; font-size:13px; text-decoration:none; font-weight:600;">
                                                     <i class='bx bx-receipt'></i> View Receipt
                                                 </a>
                                             <?php endif; ?>
@@ -1140,7 +1101,13 @@ $my_reports = $stmt->get_result();
                     ?>
                         <tr <?= $is_overdue ? 'style="background:#fff3cd;"' : '' ?>>
                             <td><?= htmlspecialchars($rep['grant_title']) ?></td>
-                            <td><?= htmlspecialchars($rep['title']) ?></td>
+                            <td>
+                                <?= htmlspecialchars($rep['title']) ?>
+                                <br>
+                                <a href="<?= htmlspecialchars($rep['file_path']) ?>" target="_blank" style="color: #3C5B6F; font-size: 12px; font-weight: 600;">
+                                    <i class='bx bx-file'></i> View Report PDF
+                                </a>
+                            </td>
                             <td style="font-size:12px;">
                                 <?= date('M d, Y', strtotime($rep['deadline'])) ?>
                                 <?php if($is_overdue): ?>
@@ -1409,16 +1376,14 @@ $my_reports = $stmt->get_result();
 
     // ========== REIMBURSEMENT TOTAL & ID CALCULATION (CRITICAL FIX) ==========
     function updateTotal() {
-        // 1. Get checked boxes
         const checkboxes = document.querySelectorAll('.reimburse-checkbox:checked');
         let total = 0;
         let selectedGrantId = null;
         let allSameGrant = true;
         
-        // 2. Calculate Total and Validate IDs
         checkboxes.forEach(checkbox => {
             const amount = parseFloat(checkbox.dataset.amount);
-            const grantId = checkbox.dataset.grantId; // Getting ID from data attribute
+            const grantId = checkbox.dataset.grantId;
             
             if (selectedGrantId === null) {
                 selectedGrantId = grantId;
@@ -1431,12 +1396,10 @@ $my_reports = $stmt->get_result();
             }
         });
         
-        // 3. Update Visual Total
         const formatted = 'RM' + total.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
         const totalEl = document.getElementById('totalClaim');
         if (totalEl) totalEl.textContent = formatted;
         
-        // 4. Update Hidden Inputs for PHP
         const infoElement = document.getElementById('selectedGrantInfo');
         const grantIdInput = document.getElementById('reimbursementGrantId');
         
@@ -1451,11 +1414,9 @@ $my_reports = $stmt->get_result();
             if(grantIdInput) grantIdInput.value = '';
         } else {
             if(infoElement) {
-                // FIXED: REMOVED GRANT ID DISPLAY
                 infoElement.textContent = `Claiming for Selected Grant`;
                 infoElement.style.color = '#856404';
             }
-            // THIS SETS THE ID FOR THE PHP SCRIPT
             if(grantIdInput) grantIdInput.value = selectedGrantId;
         }
     }
