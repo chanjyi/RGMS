@@ -312,7 +312,7 @@ if (isset($_POST['request_extension'])) {
 }
 
 // =========================================================
-// LOG EXPENDITURE (OUT-OF-POCKET SPENDING) - UPDATED
+// LOG EXPENDITURE (OUT-OF-POCKET SPENDING)
 // =========================================================
 if (isset($_POST['log_expenditure'])) {
     $grant_id = intval($_POST['grant_id']);
@@ -397,41 +397,92 @@ if (isset($_POST['log_expenditure'])) {
 }
 
 // =========================================================
-// REQUEST FUND REIMBURSEMENT
+// REQUEST FUND REIMBURSEMENT (SMART FIX)
 // =========================================================
 if (isset($_POST['request_reimbursement'])) {
-    $grant_id = intval($_POST['grant_id']);
+    $grant_id = isset($_POST['grant_id']) ? intval($_POST['grant_id']) : 0;
     $expenditure_ids = $_POST['expenditure_ids'] ?? [];
     $justification = mysqli_real_escape_string($conn, $_POST['reimbursement_justification']);
     
+    // 1. Check if expenditures are selected
     if (empty($expenditure_ids)) {
         $message = "Please select at least one expenditure to claim.";
         $messageType = "error";
     } else {
-        // Calculate total claim amount
-        $total_claim = 0;
-        $exp_ids_str = implode(',', array_map('intval', $expenditure_ids));
-        
-        $calc_query = $conn->query("SELECT SUM(amount) as total FROM expenditures WHERE id IN ($exp_ids_str) AND status='PENDING_REIMBURSEMENT'");
-        $total_claim = $calc_query->fetch_assoc()['total'] ?? 0;
-        
-        // Create reimbursement request
-        $stmt = $conn->prepare("INSERT INTO reimbursement_requests (grant_id, researcher_email, total_amount, justification, status, requested_at) VALUES (?, ?, ?, ?, 'PENDING', NOW())");
-        $stmt->bind_param("isds", $grant_id, $email, $total_claim, $justification);
-        
-        if ($stmt->execute()) {
-            $request_id = $conn->insert_id;
+        // 2. FALLBACK: If Grant ID is missing (0), find it from the database
+        if ($grant_id <= 0) {
+            // Get the first expenditure ID to find the associated grant
+            $first_exp_id = intval($expenditure_ids[0]);
+            $find_grant = $conn->prepare("
+                SELECT b.proposal_id 
+                FROM expenditures e 
+                JOIN budget_items b ON e.budget_item_id = b.id 
+                WHERE e.id = ? LIMIT 1
+            ");
+            $find_grant->bind_param("i", $first_exp_id);
+            $find_grant->execute();
+            $grant_result = $find_grant->get_result();
             
-            // Link expenditures to this request
-            foreach ($expenditure_ids as $exp_id) {
-                $link_stmt = $conn->prepare("UPDATE expenditures SET reimbursement_request_id = ?, status = 'UNDER_REVIEW' WHERE id = ?");
-                $link_stmt->bind_param("ii", $request_id, $exp_id);
-                $link_stmt->execute();
+            if ($row = $grant_result->fetch_assoc()) {
+                $grant_id = intval($row['proposal_id']);
             }
+        }
+
+        // 3. Final Validation
+        if ($grant_id <= 0) {
+            $message = "Error: Unable to identify the Grant. Please ensure you have selected valid expenditures.";
+            $messageType = "error";
+        } else {
+            // Calculate total claim amount
+            $total_claim = 0;
+            $clean_ids = array_map('intval', $expenditure_ids);
+            $exp_ids_str = implode(',', $clean_ids);
             
-            notifySystem($conn, 'hod', "Reimbursement Request: $email requests $" . number_format($total_claim, 2) . " for Grant #$grant_id");
-            $message = "Reimbursement request submitted successfully! Awaiting HOD approval.";
-            $messageType = "success";
+            // Verify all items belong to this grant (Security Check)
+            $check_consistency = $conn->query("
+                SELECT COUNT(DISTINCT b.proposal_id) as grant_count 
+                FROM expenditures e 
+                JOIN budget_items b ON e.budget_item_id = b.id 
+                WHERE e.id IN ($exp_ids_str)
+            ");
+            $consistency_row = $check_consistency->fetch_assoc();
+            
+            if ($consistency_row['grant_count'] > 1) {
+                $message = "Error: You cannot combine expenditures from different grants in one request.";
+                $messageType = "error";
+            } else {
+                // Calculate Total
+                $calc_query = $conn->query("SELECT SUM(amount) as total FROM expenditures WHERE id IN ($exp_ids_str) AND status='PENDING_REIMBURSEMENT'");
+                $total_row = $calc_query->fetch_assoc();
+                $total_claim = $total_row['total'] ?? 0;
+                
+                if ($total_claim <= 0) {
+                    $message = "Error: Total claim amount is zero or items already processed.";
+                    $messageType = "error";
+                } else {
+                    // Create Request
+                    $stmt = $conn->prepare("INSERT INTO reimbursement_requests (grant_id, researcher_email, total_amount, justification, status, requested_at) VALUES (?, ?, ?, ?, 'PENDING', NOW())");
+                    $stmt->bind_param("isds", $grant_id, $email, $total_claim, $justification);
+                    
+                    if ($stmt->execute()) {
+                        $request_id = $conn->insert_id;
+                        
+                        // Link expenditures
+                        $link_stmt = $conn->prepare("UPDATE expenditures SET reimbursement_request_id = ?, status = 'UNDER_REVIEW' WHERE id = ?");
+                        foreach ($clean_ids as $exp_id) {
+                            $link_stmt->bind_param("ii", $request_id, $exp_id);
+                            $link_stmt->execute();
+                        }
+                        
+                        notifySystem($conn, 'hod', "Reimbursement Request: $email requests $" . number_format($total_claim, 2) . " for Grant #$grant_id");
+                        $message = "Reimbursement request submitted successfully!";
+                        $messageType = "success";
+                    } else {
+                        $message = "Database Error: " . $conn->error;
+                        $messageType = "error";
+                    }
+                }
+            }
         }
     }
 }
@@ -561,7 +612,6 @@ $my_reports = $stmt->get_result();
             </div>
         <?php endif; ?>
 
-        <!-- Tab Navigation -->
         <div style="margin-bottom: 0;">
             <button class="tab-btn active" onclick="openTab(event, 'proposals')">
                 <i class='bx bx-file'></i> My Proposals
@@ -577,7 +627,6 @@ $my_reports = $stmt->get_result();
             </button>
         </div>
 
-        <!-- ========== TAB 1: PROPOSALS ========== -->
         <div id="proposals" class="tab-content active">
             <div class="form-box" style="margin-bottom: 30px; background:#f8f9fa; padding:25px; border-radius:8px;">
                 <h3 style="margin-top:0; color:#3C5B6F;">
@@ -723,7 +772,6 @@ $my_reports = $stmt->get_result();
             </table>
         </div>
 
-        <!-- ========== TAB 2: GRANTS & BUDGET ========== -->
         <div id="grants" class="tab-content">
             <h3 style="color:#3C5B6F; margin-top:0;">
                 <i class='bx bx-wallet'></i> Active Grants - Financial Overview
@@ -770,7 +818,6 @@ $my_reports = $stmt->get_result();
                             </div>
                         </div>
                         
-                        <!-- BUDGET BREAKDOWN BY CATEGORY -->
                         <h5 style="margin-top:20px; color:#3C5B6F;">Budget Breakdown</h5>
                         <div class="budget-breakdown">
                             <?php
@@ -795,7 +842,6 @@ $my_reports = $stmt->get_result();
                             <?php endwhile; ?>
                         </div>
                         
-                        <!-- PROJECT MILESTONES -->
                         <h5 style="margin-top:20px; color:#3C5B6F;">Project Milestones</h5>
                         <?php
                         $m_query = $conn->prepare("SELECT * FROM milestones WHERE grant_id = ? ORDER BY target_date");
@@ -838,7 +884,6 @@ $my_reports = $stmt->get_result();
             <?php endif; ?>
         </div>
 
-        <!-- ========== TAB 3: EXPENDITURES & CLAIMS ========== -->
         <div id="expenditures" class="tab-content">
             <?php 
             // Get all active grants for this researcher
@@ -916,7 +961,6 @@ $my_reports = $stmt->get_result();
                 </h3>
                 <p style="color:#666; margin-bottom:15px;">Select logged expenditures and submit for HOD approval to claim your funds.</p>
                 
-                <!-- Grant selector for viewing expenditures -->
                 <div style="background:#f8f9fa; padding:15px; border-radius:8px; margin-bottom:20px;">
                     <label style="display:block; margin-bottom:8px; font-weight:600; color:#333;">View Expenditures For:</label>
                     <select id="viewGrantSelector" onchange="filterExpenditures(this.value)" style="width:100%; padding:10px; border:1px solid #ddd; border-radius:5px;">
@@ -1133,51 +1177,8 @@ $my_reports = $stmt->get_result();
             
             updateTotal();
         }
-
-        // Update total and validate same grant
-        function updateTotal() {
-            const checkboxes = document.querySelectorAll('.reimburse-checkbox:checked');
-            let total = 0;
-            let selectedGrantId = null;
-            let allSameGrant = true;
-            
-            checkboxes.forEach(checkbox => {
-                const amount = parseFloat(checkbox.dataset.amount);
-                const grantId = checkbox.dataset.grantId;
-                
-                if (selectedGrantId === null) {
-                    selectedGrantId = grantId;
-                } else if (selectedGrantId !== grantId) {
-                    allSameGrant = false;
-                }
-                
-                total += amount;
-            });
-            
-            // Update display
-            const formatted = '$' + total.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-            document.getElementById('totalClaim').textContent = formatted;
-            
-            // Update grant info
-            const infoElement = document.getElementById('selectedGrantInfo');
-            const grantIdInput = document.getElementById('reimbursementGrantId');
-            
-            if (checkboxes.length === 0) {
-                infoElement.textContent = '';
-                grantIdInput.value = '';
-            } else if (!allSameGrant) {
-                infoElement.innerHTML = '<i class="bx bx-error"></i> Warning: You can only claim expenditures from one grant at a time. Please select items from the same grant.';
-                infoElement.style.color = '#dc3545';
-                grantIdInput.value = '';
-            } else {
-                infoElement.textContent = `Claiming for Grant #${selectedGrantId} (${checkboxes.length} item${checkboxes.length > 1 ? 's' : ''})`;
-                infoElement.style.color = '#856404';
-                grantIdInput.value = selectedGrantId;
-            }
-        }
         </script>
 
-        <!-- ========== TAB 4: PROGRESS REPORTS ========== -->
         <div id="reports" class="tab-content">
             <h3 style="color:#3C5B6F; margin-top:0;">
                 <i class='bx bx-bar-chart-alt-2'></i> My Progress Reports
@@ -1281,9 +1282,6 @@ $my_reports = $stmt->get_result();
         </div>
     </section>
 
-    <!-- MODALS -->
-    
-    <!-- MODAL: DELETE CONFIRMATION -->
     <div id="deleteModal" class="modal">
         <div class="modal-content" style="width:40%; max-width:500px;">
             <span class="close" onclick="closeModal('deleteModal')">&times;</span>
@@ -1305,7 +1303,6 @@ $my_reports = $stmt->get_result();
         </div>
     </div>
 
-    <!-- MODAL: APPEAL PROPOSAL -->
     <div id="appealModal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeModal('appealModal')">&times;</span>
@@ -1331,7 +1328,6 @@ $my_reports = $stmt->get_result();
         </div>
     </div>
 
-    <!-- MODAL: AMEND PROPOSAL -->
     <div id="amendModal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeModal('amendModal')">&times;</span>
@@ -1361,7 +1357,6 @@ $my_reports = $stmt->get_result();
         </div>
     </div>
 
-    <!-- MODAL: SUBMIT PROGRESS REPORT -->
     <div id="reportModal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeModal('reportModal')">&times;</span>
@@ -1383,7 +1378,6 @@ $my_reports = $stmt->get_result();
                     <textarea name="challenges" rows="3" placeholder="Describe any obstacles encountered..."></textarea>
                 </div>
                 
-                <!-- MILESTONE TRACKING -->
                 <div class="input-group">
                     <label>Mark Completed Milestones</label>
                     <div class="milestone-list" id="milestone_container">
@@ -1409,7 +1403,6 @@ $my_reports = $stmt->get_result();
         </div>
     </div>
 
-    <!-- MODAL: REQUEST DEADLINE EXTENSION -->
     <div id="extModal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeModal('extModal')">&times;</span>
@@ -1440,153 +1433,172 @@ $my_reports = $stmt->get_result();
         </div>
     </div>
 
-    <script>
-
-        // ========== TAB SWITCHING ==========
-        function openTab(evt, tabName) {
-            var tabcontent = document.getElementsByClassName("tab-content");
-            for (var i = 0; i < tabcontent.length; i++) {
-                tabcontent[i].style.display = "none";
-            }
-            var tablinks = document.getElementsByClassName("tab-btn");
-            for (var i = 0; i < tablinks.length; i++) {
-                tablinks[i].className = tablinks[i].className.replace(" active", "");
-            }
-            document.getElementById(tabName).style.display = "block";
-            evt.currentTarget.className += " active";
+<script>
+    // ========== TAB SWITCHING ==========
+    function openTab(evt, tabName) {
+        var tabcontent = document.getElementsByClassName("tab-content");
+        for (var i = 0; i < tabcontent.length; i++) {
+            tabcontent[i].style.display = "none";
         }
-
-        // ========== BUDGET CALCULATION ==========
-        function calculateTotal() {
-            var categories = document.getElementsByClassName('budget-category');
-            var total = 0;
-            for (var i = 0; i < categories.length; i++) {
-                total += parseFloat(categories[i].value) || 0;
-            }
-            document.getElementById('totalBudget').value = total.toFixed(2);
+        var tablinks = document.getElementsByClassName("tab-btn");
+        for (var i = 0; i < tablinks.length; i++) {
+            tablinks[i].className = tablinks[i].className.replace(" active", "");
         }
+        document.getElementById(tabName).style.display = "block";
+        if (evt) evt.currentTarget.className += " active";
+    }
 
-        // ========== MILESTONE MANAGEMENT ==========
-        function addMilestone() {
-            var container = document.getElementById('milestones_container');
-            var newMilestone = document.createElement('div');
-            newMilestone.className = 'milestone-input';
-            newMilestone.innerHTML = `
-                <button type="button" class="remove-btn" onclick="this.parentElement.remove()">Remove</button>
-                <input type="text" name="milestone_title[]" placeholder="Milestone Title" required>
-                <textarea name="milestone_desc[]" rows="2" placeholder="Brief description"></textarea>
-                <input type="date" name="milestone_date[]" required>
-            `;
-            container.appendChild(newMilestone);
+    // ========== BUDGET CALCULATION ==========
+    function calculateTotal() {
+        var categories = document.getElementsByClassName('budget-category');
+        var total = 0;
+        for (var i = 0; i < categories.length; i++) {
+            total += parseFloat(categories[i].value) || 0;
         }
+        document.getElementById('totalBudget').value = total.toFixed(2);
+    }
 
-        // ========== REIMBURSEMENT TOTAL CALCULATION - FIXED ==========
-        function updateTotal() {
-            var checkboxes = document.getElementsByClassName('reimburse-checkbox');
-            var total = 0;
+    // ========== MILESTONE MANAGEMENT ==========
+    function addMilestone() {
+        var container = document.getElementById('milestones_container');
+        var newMilestone = document.createElement('div');
+        newMilestone.className = 'milestone-input';
+        newMilestone.innerHTML = `
+            <button type="button" class="remove-btn" onclick="this.parentElement.remove()">Remove</button>
+            <input type="text" name="milestone_title[]" placeholder="Milestone Title" required>
+            <textarea name="milestone_desc[]" rows="2" placeholder="Brief description"></textarea>
+            <input type="date" name="milestone_date[]" required>
+        `;
+        container.appendChild(newMilestone);
+    }
+
+    // ========== REIMBURSEMENT TOTAL & ID CALCULATION (CRITICAL FIX) ==========
+    function updateTotal() {
+        // 1. Get checked boxes
+        const checkboxes = document.querySelectorAll('.reimburse-checkbox:checked');
+        let total = 0;
+        let selectedGrantId = null;
+        let allSameGrant = true;
+        
+        // 2. Calculate Total and Validate IDs
+        checkboxes.forEach(checkbox => {
+            const amount = parseFloat(checkbox.dataset.amount);
+            const grantId = checkbox.dataset.grantId; // Getting ID from data attribute
             
-            for (var i = 0; i < checkboxes.length; i++) {
-                if (checkboxes[i].checked) {
-                    var card = checkboxes[i].closest('.expenditure-card');
-                    var amountText = card.querySelector('span[style*="font-size:20px"]').textContent;
-                    // Remove $ and commas, then parse
-                    var amount = parseFloat(amountText.replace(/[$,]/g, ''));
-                    if (!isNaN(amount)) {
-                        total += amount;
-                    }
+            if (selectedGrantId === null) {
+                selectedGrantId = grantId;
+            } else if (selectedGrantId !== grantId) {
+                allSameGrant = false;
+            }
+            
+            if (!isNaN(amount)) {
+                total += amount;
+            }
+        });
+        
+        // 3. Update Visual Total
+        const formatted = '$' + total.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+        const totalEl = document.getElementById('totalClaim');
+        if (totalEl) totalEl.textContent = formatted;
+        
+        // 4. Update Hidden Inputs for PHP
+        const infoElement = document.getElementById('selectedGrantInfo');
+        const grantIdInput = document.getElementById('reimbursementGrantId');
+        
+        if (checkboxes.length === 0) {
+            if(infoElement) infoElement.textContent = '';
+            if(grantIdInput) grantIdInput.value = '';
+        } else if (!allSameGrant) {
+            if(infoElement) {
+                infoElement.innerHTML = '<i class="bx bx-error"></i> Error: Mixed grants selected.';
+                infoElement.style.color = '#dc3545';
+            }
+            if(grantIdInput) grantIdInput.value = '';
+        } else {
+            if(infoElement) {
+                infoElement.textContent = `Claiming for Grant #${selectedGrantId}`;
+                infoElement.style.color = '#856404';
+            }
+            // THIS SETS THE ID FOR THE PHP SCRIPT
+            if(grantIdInput) grantIdInput.value = selectedGrantId;
+        }
+    }
+
+    // ========== DELETE CONFIRMATION ==========
+    function confirmDelete(propId, propTitle) {
+        document.getElementById('deleteModal').style.display = "block";
+        document.getElementById('delete_prop_id').value = propId;
+        document.getElementById('deleteProposalName').textContent = propTitle;
+    }
+
+    // ========== MODAL OPENERS ==========
+    function openAmendModal(propId) {
+        document.getElementById('amendModal').style.display = "block";
+        document.getElementById('amend_prop_id').value = propId;
+    }
+
+    function openAppealModal(propId) {
+        document.getElementById('appealModal').style.display = "block";
+        document.getElementById('appeal_prop_id').value = propId;
+    }
+
+    function openReportModal(grantId) {
+        document.getElementById('reportModal').style.display = "block";
+        document.getElementById('report_grant_id').value = grantId;
+        
+        fetch('get_milestones.php?grant_id=' + grantId)
+            .then(response => response.json())
+            .then(data => {
+                var container = document.getElementById('milestone_container');
+                if (data.error) {
+                    container.innerHTML = '<p style="color:#dc3545;">' + data.error + '</p>';
+                    return;
                 }
-            }
-            
-            // Format with commas
-            var formatted = '$' + total.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-            document.getElementById('totalClaim').textContent = formatted;
-        }
-
-        // ========== DELETE CONFIRMATION ==========
-        function confirmDelete(propId, propTitle) {
-            document.getElementById('deleteModal').style.display = "block";
-            document.getElementById('delete_prop_id').value = propId;
-            document.getElementById('deleteProposalName').textContent = propTitle;
-        }
-
-        // ========== AMEND MODAL ==========
-        function openAmendModal(propId) {
-            document.getElementById('amendModal').style.display = "block";
-            document.getElementById('amend_prop_id').value = propId;
-        }
-
-        // ========== APPEAL MODAL ==========
-        function openAppealModal(propId) {
-            document.getElementById('appealModal').style.display = "block";
-            document.getElementById('appeal_prop_id').value = propId;
-        }
-
-        // ========== PROGRESS REPORT MODAL WITH MILESTONE LOADING ==========
-        function openReportModal(grantId) {
-            document.getElementById('reportModal').style.display = "block";
-            document.getElementById('report_grant_id').value = grantId;
-            
-            // Load milestones for this grant via AJAX
-            fetch('get_milestones.php?grant_id=' + grantId)
-                .then(response => response.json())
-                .then(data => {
-                    var container = document.getElementById('milestone_container');
-                    if (data.error) {
-                        container.innerHTML = '<p style="color:#dc3545;">' + data.error + '</p>';
-                        return;
-                    }
-                    
-                    if (data.length > 0) {
-                        var html = '';
-                        data.forEach(function(milestone) {
-                            var completedClass = milestone.status === 'COMPLETED' ? 'completed' : '';
-                            var checked = milestone.status === 'COMPLETED' ? 'checked disabled' : '';
-                            html += '<div class="milestone-item ' + completedClass + '">';
-                            html += '<label style="cursor:pointer;"><input type="checkbox" name="milestones[]" value="' + milestone.id + '" ' + checked + '> ';
-                            html += milestone.title + ' <small style="color:#666;">(' + milestone.status + ')</small></label>';
-                            html += '</div>';
-                        });
-                        container.innerHTML = html;
-                    } else {
-                        container.innerHTML = '<p style="color:#999; font-style:italic;">No milestones defined for this grant.</p>';
-                    }
-                })
-                .catch(error => {
-                    console.error('Error loading milestones:', error);
-                    document.getElementById('milestone_container').innerHTML = '<p style="color:#dc3545;">Error loading milestones. Please try again.</p>';
-                });
-        }
-
-        // ========== EXTENSION MODAL ==========
-        function openExtModal(reportId, originalDeadline) {
-            document.getElementById('extModal').style.display = "block";
-            document.getElementById('ext_report_id').value = reportId;
-            
-            // Format and display original deadline
-            var date = new Date(originalDeadline);
-            var formattedDate = date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-            document.getElementById('original_deadline_display').textContent = formattedDate;
-            
-            // Set minimum date for new deadline (day after original)
-            var minDate = new Date(date.getTime() + 86400000);
-            var minDateString = minDate.toISOString().split('T')[0];
-            document.getElementById('new_deadline_input').min = minDateString;
-        }
-
-        // ========== CLOSE MODAL ==========
-        function closeModal(id) { 
-            document.getElementById(id).style.display = "none"; 
-        }
-
-        // ========== CLOSE MODAL WHEN CLICKING OUTSIDE ==========
-        window.onclick = function(event) {
-            var modals = document.getElementsByClassName('modal');
-            for(var i = 0; i < modals.length; i++) {
-                if (event.target == modals[i]) {
-                    modals[i].style.display = "none";
+                
+                if (data.length > 0) {
+                    var html = '';
+                    data.forEach(function(milestone) {
+                        var completedClass = milestone.status === 'COMPLETED' ? 'completed' : '';
+                        var checked = milestone.status === 'COMPLETED' ? 'checked disabled' : '';
+                        html += '<div class="milestone-item ' + completedClass + '">';
+                        html += '<label style="cursor:pointer;"><input type="checkbox" name="milestones[]" value="' + milestone.id + '" ' + checked + '> ';
+                        html += milestone.title + ' <small style="color:#666;">(' + milestone.status + ')</small></label>';
+                        html += '</div>';
+                    });
+                    container.innerHTML = html;
+                } else {
+                    container.innerHTML = '<p style="color:#999; font-style:italic;">No milestones defined for this grant.</p>';
                 }
+            })
+            .catch(error => {
+                console.error('Error loading milestones:', error);
+                document.getElementById('milestone_container').innerHTML = '<p style="color:#dc3545;">Error loading milestones.</p>';
+            });
+    }
+
+    function openExtModal(reportId, originalDeadline) {
+        document.getElementById('extModal').style.display = "block";
+        document.getElementById('ext_report_id').value = reportId;
+        var date = new Date(originalDeadline);
+        var formattedDate = date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+        document.getElementById('original_deadline_display').textContent = formattedDate;
+        var minDate = new Date(date.getTime() + 86400000);
+        document.getElementById('new_deadline_input').min = minDate.toISOString().split('T')[0];
+    }
+
+    // ========== CLOSE MODALS ==========
+    function closeModal(id) { 
+        document.getElementById(id).style.display = "none"; 
+    }
+
+    window.onclick = function(event) {
+        var modals = document.getElementsByClassName('modal');
+        for(var i = 0; i < modals.length; i++) {
+            if (event.target == modals[i]) {
+                modals[i].style.display = "none";
             }
         }
-    </script>
+    }
+</script>
 </body>
 </html>
