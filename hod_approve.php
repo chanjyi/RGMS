@@ -85,6 +85,7 @@ if (isset($_POST['final_decision'])) {
 <head>
     <meta charset="UTF-8">
     <title>HOD Approval</title>
+    <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
     <link rel="stylesheet" href="styling/style.css">
 </head>
 <body>
@@ -97,8 +98,7 @@ if (isset($_POST['final_decision'])) {
         <div style="display: flex; gap: 20px;">
             <div style="flex: 2;">
                 <h3>Proposal Document</h3>
-                <iframe src="<?= $data['file_path'] ?>" style="width:100%; height:500px; border:1px solid #ccc;"></iframe>
-            </div>
+                <iframe src="<?= $data['file_path'] ?>#toolbar=0" style="width:100%; height:500px; border:1px solid #ccc;"></iframe>            </div>
             
             <div style="flex: 1; background: white; padding: 20px; border-radius: 10px; height: fit-content;">
                 <h3 style="margin-top:0; color: #3C5B6F;">Reviewer Feedback</h3>

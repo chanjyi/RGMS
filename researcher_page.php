@@ -129,7 +129,7 @@ if (isset($_POST['delete_proposal'])) {
 }
 
 // =========================================================
-// USE CASE 11: AMEND PROPOSAL
+// USE CASE 11: AMEND PROPOSAL (FIXED)
 // =========================================================
 if (isset($_POST['amend_proposal'])) {
     $prop_id = intval($_POST['proposal_id']);
@@ -138,7 +138,10 @@ if (isset($_POST['amend_proposal'])) {
     $target_dir = "uploads/";
     $file_name = basename($_FILES["amend_file"]["name"]);
     $file_type = strtolower(pathinfo($file_name, PATHINFO_EXTENSION));
-    $new_file_name = "amend_" . time() . "_" . $prop_id . "." . $file_type;
+    
+    // Create unique filename
+    $clean_email = str_replace(['@', '.'], '_', $email);
+    $new_file_name = "prop_" . time() . "_" . $clean_email . "_v2." . $file_type;
     $target_file = $target_dir . $new_file_name;
 
     if ($file_type != "pdf") {
@@ -146,27 +149,59 @@ if (isset($_POST['amend_proposal'])) {
         $messageType = "error";
     } else {
         if (move_uploaded_file($_FILES["amend_file"]["tmp_name"], $target_file)) {
-            // Get current version number and increment
+            // 1. Get current version number and increment
             $version_query = $conn->prepare("SELECT MAX(CAST(SUBSTRING(version_number, 2) AS DECIMAL(10,2))) as max_ver FROM document_versions WHERE proposal_id = ?");
             $version_query->bind_param("i", $prop_id);
             $version_query->execute();
             $ver_result = $version_query->get_result()->fetch_assoc();
-            $new_version = "v" . number_format($ver_result['max_ver'] + 0.1, 1);
+            $new_version = "v" . number_format(($ver_result['max_ver'] ?? 0) + 1.0, 1);
             
-            // Insert new version
+            // 2. Insert new version record
             $version_stmt = $conn->prepare("INSERT INTO document_versions (proposal_id, version_number, file_path, uploaded_by, change_notes) VALUES (?, ?, ?, ?, ?)");
             $version_stmt->bind_param("issss", $prop_id, $new_version, $target_file, $email, $amendment_notes);
             $version_stmt->execute();
             
-            // Update proposal
+            // 3. Update proposal status and file path
             $stmt = $conn->prepare("UPDATE proposals SET file_path = ?, status = 'RESUBMITTED', amendment_notes = ?, resubmitted_at = NOW() WHERE id = ? AND researcher_email = ?");
             $stmt->bind_param("ssis", $target_file, $amendment_notes, $prop_id, $email);
             
             if ($stmt->execute()) {
-                notifySystem($conn, 'reviewer', "Proposal #$prop_id has been amended and resubmitted by $email (Version $new_version). Please verify corrections.");
-                $message = "Amendment submitted successfully! Version: $new_version"; 
+                
+                // --- FIX STARTS HERE: RE-ASSIGN TO ORIGINAL REVIEWER ---
+                
+                // A. Find the reviewer who requested the amendment (get the latest review)
+                $find_rev = $conn->prepare("SELECT reviewer_id FROM reviews WHERE proposal_id = ? ORDER BY id DESC LIMIT 1");
+                $find_rev->bind_param("i", $prop_id);
+                $find_rev->execute();
+                $rev_result = $find_rev->get_result();
+
+                if ($rev_result->num_rows > 0) {
+                    $reviewer_row = $rev_result->fetch_assoc();
+                    $original_reviewer_id = $reviewer_row['reviewer_id'];
+
+                    // B. Insert a NEW 'Pending' review task for them
+                    $new_task = $conn->prepare("INSERT INTO reviews (proposal_id, reviewer_id, status, assigned_date, type) VALUES (?, ?, 'Pending', NOW(), 'Proposal')");
+                    $new_task->bind_param("ii", $prop_id, $original_reviewer_id);
+                    $new_task->execute();
+
+                    // C. Notify that specific reviewer
+                    $notif_q = $conn->prepare("SELECT email FROM users WHERE id = ?");
+                    $notif_q->bind_param("i", $original_reviewer_id);
+                    $notif_q->execute();
+                    $rev_email = $notif_q->get_result()->fetch_assoc()['email'];
+
+                    $msg = "Action Required: Researcher has submitted amendments for Proposal #$prop_id. It is back in your pending list.";
+                    $conn->query("INSERT INTO notifications (user_email, message, type) VALUES ('$rev_email', '$msg', 'info')");
+                }
+                
+                // --- FIX ENDS HERE ---
+
+                $message = "Amendment submitted successfully! The reviewer has been notified."; 
                 $messageType = "success";
             }
+        } else {
+            $message = "Error uploading file.";
+            $messageType = "error";
         }
     }
 }
@@ -568,8 +603,19 @@ $my_reports = $stmt->get_result();
                                 <?php endif; ?>
                             </td>
                             <td>
-                                <span class="status-badge <?= strtolower($row['status']) ?>">
-                                    <?= str_replace('_', ' ', $row['status']) ?>
+                                <?php 
+                                    // Default logic
+                                    $status_label = str_replace('_', ' ', $row['status']);
+                                    $badge_class = strtolower($row['status']);
+
+                                    // Custom logic for Appeal Approved
+                                    if ($row['status'] == 'PENDING_REASSIGNMENT') {
+                                        $status_label = 'Appeal Approved'; // Friendly text
+                                        $badge_class = 'approved';         // Green badge
+                                    }
+                                ?>
+                                <span class="status-badge <?= $badge_class ?>">
+                                    <?= $status_label ?>
                                 </span>
                             </td>
                             <td>$<?= number_format($row['budget_requested'], 2) ?></td>

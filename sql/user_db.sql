@@ -3,9 +3,9 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Jan 18, 2026 at 08:58 AM
+-- Generation Time: Jan 22, 2026 at 06:18 PM
 -- Server version: 10.4.32-MariaDB
--- PHP Version: 8.2.12
+-- PHP Version: 8.0.30
 
 SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
 START TRANSACTION;
@@ -42,7 +42,9 @@ CREATE TABLE `appeal_requests` (
 
 INSERT INTO `appeal_requests` (`id`, `proposal_id`, `researcher_email`, `justification`, `status`, `submitted_at`) VALUES
 (4, 19, 'researcher@gmail.com', 'idk', 'PENDING', '2026-01-08 06:23:07'),
-(5, 15, 'researcher@gmail.com', 'my research confirm work der trust me', 'PENDING', '2026-01-18 07:49:04');
+(5, 15, 'researcher@gmail.com', 'my research confirm work der trust me', 'PENDING', '2026-01-18 07:49:04'),
+(6, 24, '2@mail.com', 'its good. can u see this?', 'PENDING', '2026-01-22 07:38:32'),
+(7, 26, '2@mail.com', 'read', 'PENDING', '2026-01-22 10:14:43');
 
 -- --------------------------------------------------------
 
@@ -73,7 +75,11 @@ INSERT INTO `budget_items` (`id`, `proposal_id`, `category`, `description`, `all
 (6, 22, 'Equipment', 'Equipment budget', 1000.00, 0.00, '2026-01-14 03:54:45'),
 (7, 22, 'Materials', 'Materials budget', 1000.00, 0.00, '2026-01-14 03:54:45'),
 (8, 22, 'Travel', 'Travel budget', 1999.00, 0.00, '2026-01-14 03:54:45'),
-(9, 22, 'Other', 'Other budget', 1000.00, 0.00, '2026-01-14 03:54:45');
+(9, 22, 'Other', 'Other budget', 1000.00, 0.00, '2026-01-14 03:54:45'),
+(10, 24, 'Equipment', 'Equipment budget', 0.01, 0.00, '2026-01-22 07:28:55'),
+(11, 24, 'Materials', 'Materials budget', 0.01, 0.00, '2026-01-22 07:28:55'),
+(12, 24, 'Travel', 'Travel budget', 0.01, 0.00, '2026-01-22 07:28:55'),
+(14, 27, 'Equipment', 'Equipment budget', 2.00, 0.00, '2026-01-22 10:44:34');
 
 -- --------------------------------------------------------
 
@@ -123,7 +129,12 @@ CREATE TABLE `document_versions` (
 INSERT INTO `document_versions` (`id`, `proposal_id`, `version_number`, `file_path`, `uploaded_by`, `upload_date`, `change_notes`) VALUES
 (1, 21, 'v1.0', 'uploads/prop_1768391550_researcher_gmail_com.pdf', 'researcher@gmail.com', '2026-01-14 03:52:30', NULL),
 (2, 22, 'v1.0', 'uploads/prop_1768391685_researcher_gmail_com.pdf', 'researcher@gmail.com', '2026-01-14 03:54:45', NULL),
-(3, 23, 'v1.0', 'uploads/prop_1768391951_researcher_gmail_com.pdf', 'researcher@gmail.com', '2026-01-14 03:59:11', NULL);
+(3, 23, 'v1.0', 'uploads/prop_1768391951_researcher_gmail_com.pdf', 'researcher@gmail.com', '2026-01-14 03:59:11', NULL),
+(4, 24, 'v1.0', 'uploads/prop_1769066935_2_mail_com.pdf', '2@mail.com', '2026-01-22 07:28:55', NULL),
+(6, 26, 'v1.0', 'uploads/prop_1769076781_2_mail_com.pdf', '2@mail.com', '2026-01-22 10:13:01', NULL),
+(7, 27, 'v1.0', 'uploads/prop_1769078674_2_mail_com.pdf', '2@mail.com', '2026-01-22 10:44:34', NULL),
+(8, 27, 'v1.1', 'uploads/amend_1769079165_27.pdf', '2@mail.com', '2026-01-22 10:52:45', 'yay'),
+(9, 26, 'v2.0', 'uploads/prop_1769079938_2_mail_com_v2.pdf', '2@mail.com', '2026-01-22 11:05:38', 'done');
 
 -- --------------------------------------------------------
 
@@ -362,7 +373,28 @@ INSERT INTO `notifications` (`id`, `user_email`, `message`, `is_read`, `created_
 (73, '1@mail.com', 'New Assignment: You have been assigned a proposal.', 0, '2026-01-11 05:34:37', 'info'),
 (74, '2@mail.com', 'Final Decision: Your proposal \'test1\' has been APPROVED by the Head of Department.', 0, '2026-01-17 08:52:52', 'success'),
 (75, '2@mail.com', 'Final Decision: Your proposal \'Rejected HOD\' has been REJECTED by the Head of Department.', 0, '2026-01-17 10:12:43', 'warning'),
-(76, '3@mail.com', 'Appeal Request: researcher@gmail.com has contested rejection of Proposal #15. Please review and potentially reassign to a new reviewer.', 0, '2026-01-18 07:49:04', 'alert');
+(76, '3@mail.com', 'Appeal Request: researcher@gmail.com has contested rejection of Proposal #15. Please review and potentially reassign to a new reviewer.', 0, '2026-01-18 07:49:04', 'alert'),
+(77, '4@mail.com', 'New Proposal Submitted: \'test_appeal\' by 2@mail.com', 0, '2026-01-22 07:28:55', 'alert'),
+(78, '1@mail.com', 'New Assignment: You have been assigned a proposal.', 0, '2026-01-22 07:29:38', 'info'),
+(79, '2@mail.com', 'Update on \'test_appeal\': Your proposal status is now rejected.', 0, '2026-01-22 07:37:43', 'info'),
+(80, '3@mail.com', 'Appeal Request: 2@mail.com has contested rejection of Proposal #24. Please review and potentially reassign to a new reviewer.', 0, '2026-01-22 07:38:32', 'alert'),
+(81, '2@mail.com', 'Appeal Update: The HOD has accepted your appeal. Your proposal will be reassigned to a new reviewer.', 0, '2026-01-22 08:08:47', 'info'),
+(82, '4@mail.com', 'New Proposal Submitted: \'test_appeal\' by 2@mail.com', 0, '2026-01-22 08:25:55', 'alert'),
+(83, '4@mail.com', 'New Proposal Submitted: \'test_newappeal\' by 2@mail.com', 0, '2026-01-22 10:13:01', 'alert'),
+(84, '1@mail.com', 'New Assignment: You have been assigned a proposal.', 0, '2026-01-22 10:13:23', 'info'),
+(85, '2@mail.com', 'Update on \'test_newappeal\': Your proposal status is now rejected.', 0, '2026-01-22 10:14:09', 'info'),
+(86, '3@mail.com', 'Appeal Request: 2@mail.com has contested rejection of Proposal #26. Please review and potentially reassign to a new reviewer.', 0, '2026-01-22 10:14:43', 'alert'),
+(87, '2@mail.com', 'Appeal Update: The HOD has accepted your appeal. Your proposal will be reassigned to a new reviewer.', 0, '2026-01-22 10:15:11', 'info'),
+(88, '11@mail.com', 'Appeal Case: You have been assigned to review proposal #24.', 0, '2026-01-22 10:15:34', 'info'),
+(89, '4@mail.com', 'New Proposal Submitted: \'notification_proposal_id\' by 2@mail.com', 0, '2026-01-22 10:44:34', 'alert'),
+(90, '1@mail.com', 'New Assignment: You have been assigned a proposal.', 0, '2026-01-22 10:46:48', 'info'),
+(91, '1@mail.com', 'New Assignment: You have been assigned to review proposal \"notification_proposal_id\".', 0, '2026-01-22 10:51:04', 'info'),
+(92, '2@mail.com', 'Action Required: The reviewer requested amendments on \'notification_proposal_id\'. Please check the dashboard.', 0, '2026-01-22 10:51:32', 'info'),
+(93, '11@mail.com', 'Appeal Case: You have been assigned to review proposal \"test_newappeal\".', 0, '2026-01-22 10:51:53', 'info'),
+(94, '1@mail.com', 'Proposal #27 has been amended and resubmitted by 2@mail.com (Version v1.1). Please verify corrections.', 0, '2026-01-22 10:52:45', 'alert'),
+(95, '11@mail.com', 'Proposal #27 has been amended and resubmitted by 2@mail.com (Version v1.1). Please verify corrections.', 0, '2026-01-22 10:52:45', 'alert'),
+(96, '2@mail.com', 'Action Required: The reviewer requested amendments on \'test_newappeal\'. Please check the dashboard.', 0, '2026-01-22 11:04:10', 'info'),
+(97, '11@mail.com', 'Action Required: Researcher has submitted amendments for Proposal #26. It is back in your pending list.', 0, '2026-01-22 11:05:38', 'info');
 
 -- --------------------------------------------------------
 
@@ -404,7 +436,7 @@ CREATE TABLE `proposals` (
   `researcher_email` varchar(255) NOT NULL,
   `file_path` varchar(255) NOT NULL,
   `reviewer_email` varchar(255) DEFAULT NULL,
-  `status` enum('DRAFT','SUBMITTED','ASSIGNED','PENDING_REVIEW','REQUIRES_AMENDMENT','RESUBMITTED','RECOMMENDED','REJECTED','APPROVED','APPEALED','APPEAL_REJECTED') DEFAULT 'SUBMITTED',
+  `status` enum('DRAFT','SUBMITTED','ASSIGNED','PENDING_REVIEW','REQUIRES_AMENDMENT','RESUBMITTED','RECOMMENDED','REJECTED','APPROVED','APPEALED','APPEAL_REJECTED','PENDING_REASSIGNMENT') DEFAULT 'SUBMITTED',
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `approved_at` datetime DEFAULT NULL,
   `resubmitted_at` datetime DEFAULT NULL,
@@ -437,9 +469,12 @@ INSERT INTO `proposals` (`id`, `title`, `description`, `researcher_email`, `file
 (18, 'test5', 'reviewer don\\\'t approve yet', '2@mail.com', 'uploads/prop_1768109662_2_mail_com.pdf', NULL, 'ASSIGNED', '2026-01-11 05:34:22', NULL, NULL, 'Normal', NULL, NULL, NULL, 10000.00, 0.00, 0.00, 12),
 (19, 'testproposal3', 'idk', 'researcher@gmail.com', 'uploads/prop_1767881930_researcher_gmail_com.pdf', NULL, '', '2026-01-08 06:18:50', NULL, NULL, 'Normal', NULL, NULL, NULL, 5000.00, 0.00, 0.00, 12),
 (20, 'testproposal4', 'idk', 'researcher@gmail.com', 'uploads/prop_1767881947_researcher_gmail_com.pdf', NULL, 'APPROVED', '2026-01-08 06:19:07', NULL, NULL, 'Normal', NULL, NULL, NULL, 6000.00, 0.00, 0.00, 12),
-(21, 'test proposal', 'idk', 'researcher@gmail.com', 'uploads/prop_1768391550_researcher_gmail_com.pdf', NULL, 'SUBMITTED', '2026-01-14 03:52:30', NULL, NULL, 'Normal', NULL, NULL, NULL, 1420.00, 0.00, 0.00, 12),
+(21, 'test proposal', 'idk', 'researcher@gmail.com', 'uploads/prop_1768391550_researcher_gmail_com.pdf', NULL, 'ASSIGNED', '2026-01-14 03:52:30', NULL, NULL, 'Normal', NULL, NULL, NULL, 1420.00, 0.00, 0.00, 12),
 (22, 'testproposal5', 'idk', 'researcher@gmail.com', 'uploads/prop_1768391685_researcher_gmail_com.pdf', NULL, 'REJECTED', '2026-01-14 03:54:45', NULL, NULL, 'Normal', NULL, NULL, NULL, 4999.00, 0.00, 0.00, 6),
-(23, 'test ', 'idk', 'researcher@gmail.com', 'uploads/prop_1768391951_researcher_gmail_com.pdf', NULL, 'APPROVED', '2026-01-14 03:59:11', NULL, NULL, 'Normal', NULL, NULL, NULL, 0.00, 0.00, 0.00, 14);
+(23, 'test ', 'idk', 'researcher@gmail.com', 'uploads/prop_1768391951_researcher_gmail_com.pdf', NULL, 'APPROVED', '2026-01-14 03:59:11', NULL, NULL, 'Normal', NULL, NULL, NULL, 0.00, 0.00, 0.00, 14),
+(24, 'test_appeal', 'test_appeal', '2@mail.com', 'uploads/prop_1769066935_2_mail_com.pdf', NULL, 'ASSIGNED', '2026-01-22 07:28:55', NULL, NULL, 'High', NULL, NULL, NULL, 0.03, 0.00, 0.00, 12),
+(26, 'test_newappeal', '.', '2@mail.com', 'uploads/prop_1769079938_2_mail_com_v2.pdf', NULL, 'RESUBMITTED', '2026-01-22 10:13:01', NULL, '2026-01-22 19:05:38', 'High', NULL, 'go change', 'done', 0.00, 0.00, 0.00, 1),
+(27, 'notification_proposal_id', 'no more id', '2@mail.com', 'uploads/amend_1769079165_27.pdf', NULL, 'RESUBMITTED', '2026-01-22 10:44:34', NULL, '2026-01-22 18:52:45', 'Normal', NULL, 'go change\r\n', 'yay', 2.00, 0.00, 0.00, 12);
 
 -- --------------------------------------------------------
 
@@ -508,7 +543,7 @@ CREATE TABLE `reviews` (
   `type` enum('Proposal','Appeal') DEFAULT 'Proposal',
   `feedback` text DEFAULT NULL,
   `annotated_file` varchar(255) DEFAULT NULL,
-  `decision` enum('RECOMMEND','REJECT') DEFAULT NULL,
+  `decision` enum('RECOMMEND','REJECT','AMENDMENT') DEFAULT NULL,
   `review_date` datetime DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
@@ -531,7 +566,14 @@ INSERT INTO `reviews` (`id`, `reviewer_id`, `reviewer_email`, `proposal_id`, `st
 (17, 1, NULL, 12, 'Completed', '2026-01-07', 'Proposal', NULL, NULL, 'REJECT', NULL),
 (18, 1, NULL, 15, 'Completed', '2026-01-07', 'Proposal', NULL, NULL, 'REJECT', NULL),
 (19, 1, NULL, 17, 'Completed', '2026-01-11', 'Proposal', 'veli good cepat approve this', NULL, 'RECOMMEND', '2026-01-11 10:58:38'),
-(20, 1, NULL, 18, 'Pending', '2026-01-11', 'Proposal', NULL, NULL, NULL, NULL);
+(20, 1, NULL, 18, 'Pending', '2026-01-11', 'Proposal', NULL, NULL, NULL, NULL),
+(21, 1, NULL, 24, 'Completed', '2026-01-22', 'Proposal', 'can u see this?', 'uploads/reviews/rev_1769067463_BAD.pdf', 'REJECT', '2026-01-22 15:37:43'),
+(22, 1, NULL, 26, 'Completed', '2026-01-22', 'Proposal', 'bad', 'uploads/reviews/rev_1769076849_BAD.pdf', 'REJECT', '2026-01-22 18:14:09'),
+(23, 8, NULL, 24, 'Pending', '2026-01-22', 'Appeal', NULL, NULL, NULL, NULL),
+(24, 1, NULL, 21, 'Pending', '2026-01-22', 'Proposal', NULL, NULL, NULL, NULL),
+(25, 1, NULL, 27, 'Completed', '2026-01-22', 'Proposal', 'go change\r\n', NULL, '', '2026-01-22 18:51:32'),
+(26, 8, NULL, 26, 'Completed', '2026-01-22', 'Appeal', 'go change', NULL, 'AMENDMENT', '2026-01-22 19:04:10'),
+(27, 8, NULL, 26, 'Pending', '2026-01-22', 'Proposal', NULL, NULL, NULL, NULL);
 
 -- --------------------------------------------------------
 
@@ -566,7 +608,8 @@ INSERT INTO `users` (`id`, `name`, `email`, `password`, `role`, `department_id`,
 (3, 'HOD', '3@mail.com', '$2y$10$TB9alxPUk86xQDjNWsa24.ISJllSZGStmk70QCdDlWbhsv4wbGqXe', 'hod', 1, 1, 1, 'default.png', 'default', 1, 1, 1, 1),
 (4, 'mr admin', '4@mail.com', '$2y$10$0dlqy6UIW.iLj0M4.OVCHuNB3JXf9GxMlJScvf5W.Dw4Qw.aeihjC', 'admin', NULL, 1, 1, 'default.png', 'default', 1, 1, 1, 1),
 (5, 'a', 'a@mail.com', '$2y$10$F3Ht1Hd2i2gW8oZGsGaJQONlqc6JQ7qwgsr3u0KyCyNUx1PhKmZKu', 'researcher', NULL, 1, 1, 'default.png', 'default', 1, 1, 1, 1),
-(6, 'researcher', 'researcher@gmail.com', '$2y$10$najEye47FlSQ/CPwoDrRduvG/Aj2FGufluVvyhnbTVzgqHlkN3It6', 'researcher', NULL, 1, 1, 'default.png', 'default', 1, 1, 1, 1);
+(6, 'researcher', 'researcher@gmail.com', '$2y$10$najEye47FlSQ/CPwoDrRduvG/Aj2FGufluVvyhnbTVzgqHlkN3It6', 'researcher', NULL, 1, 1, 'default.png', 'default', 1, 1, 1, 1),
+(8, 'ms.new reviewer', '11@mail.com', '$2y$10$gY5WiBQ3tGFPVVbnUWX3ieAIUe.nd06km10j8//kqY4hz8QGhiOgu', 'reviewer', NULL, 1, 1, 'default.png', 'default', 1, 1, 1, 1);
 
 --
 -- Indexes for dumped tables
@@ -743,13 +786,13 @@ ALTER TABLE `users`
 -- AUTO_INCREMENT for table `appeal_requests`
 --
 ALTER TABLE `appeal_requests`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
 
 --
 -- AUTO_INCREMENT for table `budget_items`
 --
 ALTER TABLE `budget_items`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=10;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=15;
 
 --
 -- AUTO_INCREMENT for table `departments`
@@ -761,7 +804,7 @@ ALTER TABLE `departments`
 -- AUTO_INCREMENT for table `document_versions`
 --
 ALTER TABLE `document_versions`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=10;
 
 --
 -- AUTO_INCREMENT for table `expenditures`
@@ -773,7 +816,7 @@ ALTER TABLE `expenditures`
 -- AUTO_INCREMENT for table `extension_requests`
 --
 ALTER TABLE `extension_requests`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
 
 --
 -- AUTO_INCREMENT for table `fund`
@@ -797,7 +840,7 @@ ALTER TABLE `grant_document`
 -- AUTO_INCREMENT for table `hod_tier_assignment`
 --
 ALTER TABLE `hod_tier_assignment`
-  MODIFY `assignment_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=12;
+  MODIFY `assignment_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=11;
 
 --
 -- AUTO_INCREMENT for table `milestones`
@@ -815,7 +858,7 @@ ALTER TABLE `misconduct_reports`
 -- AUTO_INCREMENT for table `notifications`
 --
 ALTER TABLE `notifications`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=77;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=98;
 
 --
 -- AUTO_INCREMENT for table `progress_reports`
@@ -827,13 +870,13 @@ ALTER TABLE `progress_reports`
 -- AUTO_INCREMENT for table `proposals`
 --
 ALTER TABLE `proposals`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=24;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=28;
 
 --
 -- AUTO_INCREMENT for table `proposal_rubric`
 --
 ALTER TABLE `proposal_rubric`
-  MODIFY `rubric_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=26;
+  MODIFY `rubric_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=18;
 
 --
 -- AUTO_INCREMENT for table `research_progress`
@@ -845,13 +888,13 @@ ALTER TABLE `research_progress`
 -- AUTO_INCREMENT for table `reviews`
 --
 ALTER TABLE `reviews`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=21;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=28;
 
 --
 -- AUTO_INCREMENT for table `users`
 --
 ALTER TABLE `users`
-  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
+  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=9;
 
 --
 -- Constraints for dumped tables

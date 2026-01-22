@@ -24,10 +24,21 @@ if (isset($_POST['assign_proposal'])) {
     if ($stmt->execute()) {
         $conn->query("UPDATE proposals SET status = 'ASSIGNED' WHERE id = $prop_id");
         
-        // Notify Reviewer
+        // --- NEW CODE START: Fetch Title for Notification ---
+        $title_q = $conn->query("SELECT title FROM proposals WHERE id = $prop_id");
+        $prop_title = ($title_q && $title_q->num_rows > 0) ? $title_q->fetch_assoc()['title'] : "Unknown Proposal";
+        
+        // Notify Reviewer with Title
         $rev_q = $conn->query("SELECT email FROM users WHERE id = $reviewer_id");
-        $rev_email = $rev_q->fetch_assoc()['email'];
-        $conn->query("INSERT INTO notifications (user_email, message) VALUES ('$rev_email', 'New Assignment: You have been assigned a proposal.')");
+        if ($rev_q && $rev_q->num_rows > 0) {
+            $rev_email = $rev_q->fetch_assoc()['email'];
+            $msg = "New Assignment: You have been assigned to review proposal \"$prop_title\".";
+            
+            $notif = $conn->prepare("INSERT INTO notifications (user_email, message) VALUES (?, ?)");
+            $notif->bind_param("ss", $rev_email, $msg);
+            $notif->execute();
+        }
+        // --- NEW CODE END ---
 
         $message = "Proposal assigned successfully!";
     } else {
@@ -69,9 +80,17 @@ if (isset($_POST['assign_appeal'])) {
 
                 // Notify Reviewer
                 $rev_q = $conn->query("SELECT email FROM users WHERE id = $reviewer_id");
+                
+                // NEW: Fetch Proposal Title
+                $title_q = $conn->query("SELECT title FROM proposals WHERE id = $prop_id");
+                $prop_title = ($title_q && $title_q->num_rows > 0) ? $title_q->fetch_assoc()['title'] : "Unknown Proposal";
+
                 if ($rev_q && $rev_q->num_rows > 0) {
                     $rev_email = $rev_q->fetch_assoc()['email'];
-                    $msg = "Appeal Case: You have been assigned to review proposal #$prop_id.";
+                    
+                    // UPDATED MESSAGE: Uses title instead of #ID
+                    $msg = "Appeal Case: You have been assigned to review proposal \"$prop_title\".";
+                    
                     $notif = $conn->prepare("INSERT INTO notifications (user_email, message) VALUES (?, ?)");
                     $notif->bind_param("ss", $rev_email, $msg);
                     $notif->execute();
