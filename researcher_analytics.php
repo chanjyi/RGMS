@@ -177,6 +177,9 @@ while($row = $result->fetch_assoc()) {
             border-radius: 12px; 
             box-shadow: 0 2px 8px rgba(0,0,0,0.1); 
             margin-bottom: 25px;
+            /* FIX: Override fixed height from style.css to fit content */
+            height: auto !important; 
+            min-height: fit-content;
         }
         
         .chart-container h3 { 
@@ -301,7 +304,6 @@ while($row = $result->fetch_assoc()) {
         </div>
         <hr style="border: 1px solid #3C5B6F; opacity: 0.3; margin-bottom: 25px;">
 
-        <!-- Key Performance Indicators -->
         <div class="analytics-grid">
             <div class="stat-card">
                 <h3><i class='bx bx-file'></i> Total Proposals</h3>
@@ -334,7 +336,6 @@ while($row = $result->fetch_assoc()) {
             </div>
         </div>
 
-        <!-- Budget Summary -->
         <div class="summary-box">
             <h4><i class='bx bx-wallet'></i> Budget Overview</h4>
             <div class="summary-stats">
@@ -357,7 +358,6 @@ while($row = $result->fetch_assoc()) {
             </div>
         </div>
 
-        <!-- Charts Row 1 -->
         <div class="grid-2">
             <div class="chart-container">
                 <h3><i class='bx bx-pie-chart'></i> Proposal Status Distribution</h3>
@@ -374,7 +374,6 @@ while($row = $result->fetch_assoc()) {
             </div>
         </div>
 
-        <!-- Charts Row 2 -->
         <div class="grid-2">
             <div class="chart-container">
                 <h3><i class='bx bx-line-chart'></i> Submission Trends (Last 12 Months)</h3>
@@ -391,7 +390,6 @@ while($row = $result->fetch_assoc()) {
             </div>
         </div>
 
-        <!-- Expenditure Breakdown -->
         <div class="chart-container">
             <h3><i class='bx bx-receipt'></i> Expenditure Status</h3>
             <div style="max-width: 600px; margin: 0 auto;">
@@ -418,7 +416,6 @@ while($row = $result->fetch_assoc()) {
             </div>
         </div>
 
-        <!-- Category Spending Breakdown -->
         <div class="chart-container">
             <h3><i class='bx bx-category'></i> Budget Utilization by Category</h3>
             <?php if (!empty($stats['categories'])): ?>
@@ -442,7 +439,6 @@ while($row = $result->fetch_assoc()) {
             <?php endif; ?>
         </div>
 
-        <!-- Recent Activity -->
         <div class="activity-list">
             <h3 style="margin: 0 0 20px 0; color: #3C5B6F;">
                 <i class='bx bx-history'></i> Recent Activity
