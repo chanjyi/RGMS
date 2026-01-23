@@ -210,104 +210,16 @@ $border_color = ($msg_type === 'error') ? '#f5c6cb' : '#c3e6cb';
         <p class="dash-value">Pending users</p>
       </div>
     </a>
+    
 
-    <!-- Expandable "Assign New Proposal" item (still fits same style) -->
-    <div class="dash-card dash-card-expand">
-
-      <!-- Header row (still same style) -->
-      <div class="settings-item" id="assignProposalToggle"
-           onclick="toggleDashCard('assignProposalBody','assignProposalToggle')">
-
-        <div class="settings-icon">
-          <i class='bx bx-task'></i>
-        </div>
-
-        <div class="settings-text">
-          <div class="settings-title">Assign New Proposal</div>
-          <div class="settings-desc"><?= (int)$new_proposals->num_rows ?> proposals waiting</div>
-        </div>
-
-        <div class="settings-arrow">
-          <i class='bx bx-chevron-right'></i>
-        </div>
-      </div>
-
-      <!-- Body -->
-      <div id="assignProposalBody" class="dash-body hidden">
-        <?php if ($new_proposals->num_rows > 0): ?>
-          <form method="POST">
-            <div class="input-group">
-              <label>Proposal</label>
-              <select name="proposal_id" required>
-                <?php while($row = $new_proposals->fetch_assoc()): ?>
-                  <option value="<?= $row['id'] ?>">
-                    <?= htmlspecialchars($row['title']) ?> (<?= htmlspecialchars($row['researcher_email']) ?>)
-                  </option>
-                <?php endwhile; ?>
-              </select>
-            </div>
-
-            <div class="input-group">
-              <label>Reviewer</label>
-              <select name="reviewer_id" required>
-                <option value="">-- Choose Reviewer --</option>
-                <?php
-                $reviewers->data_seek(0);
-                while($r = $reviewers->fetch_assoc()):
-                ?>
-                  <option value="<?= $r['id'] ?>"><?= htmlspecialchars($r['name']) ?></option>
-                <?php endwhile; ?>
-              </select>
-            </div>
-
-            <button type="submit" name="assign_proposal" class="btn-save">Assign</button>
-          </form>
-        <?php else: ?>
-          <p style="color:#666; font-style:italic; margin:0;">No new proposals waiting.</p>
-        <?php endif; ?>
-      </div>
+    <a class="dash-card" href="assign_new_proposal.php">
+    <div class="dash-icon"><i class='bx bx-task'></i></div>
+    <div class="dash-text">
+      <h3>Assign New Proposal</h3>
+      <p class="dash-value"><?= (int)$new_proposals->num_rows ?> proposals waiting</p>
     </div>
+  </a>
 
-  </div>
-
-  <!-- Keep appeal section below (optional: convert to settings style too) -->
-  <div class="form-box" style="border-left: 5px solid #dc3545; margin-top: 20px;">
-    <h3 style="color: #dc3545; margin-bottom: 15px;">Assign Appeal Cases</h3>
-
-    <?php if ($appeals->num_rows > 0): ?>
-      <form method="POST">
-        <div class="input-group">
-          <label>Appeal Case</label>
-          <select name="proposal_id" required>
-            <?php while($row = $appeals->fetch_assoc()): ?>
-              <option value="<?= $row['id'] ?>">
-                <?= htmlspecialchars($row['title']) ?> (<?= htmlspecialchars($row['researcher_email']) ?>)
-              </option>
-            <?php endwhile; ?>
-          </select>
-        </div>
-
-        <div class="input-group">
-          <label>Assign to Reviewer</label>
-          <select name="reviewer_id" required>
-            <option value="">-- Choose Reviewer --</option>
-            <?php
-            $reviewers->data_seek(0);
-            while($r = $reviewers->fetch_assoc()):
-            ?>
-              <option value="<?= $r['id'] ?>"><?= htmlspecialchars($r['name']) ?></option>
-            <?php endwhile; ?>
-          </select>
-        </div>
-
-        <button type="submit" name="assign_appeal" class="btn-save" style="background: #dc3545;">
-          Assign Appeal
-        </button>
-      </form>
-    <?php else: ?>
-      <p style="color: #666; font-style: italic;">No active appeals.</p>
-    <?php endif; ?>
-  </div>
 
 </section>
 
