@@ -10,8 +10,22 @@ if (!isset($_SESSION['email']) || ($_SESSION['role'] ?? '') !== 'admin') {
     exit();
 }
 
+$email = $_SESSION['email'];
 $message  = "";
 $msg_type = ""; // 'success' | 'error'
+
+/* =========================
+   FETCH USER DETAILS
+   ========================= */
+$user_q = $conn->prepare("SELECT id, name, profile_pic FROM users WHERE email = ?");
+$user_q->bind_param("s", $email);
+$user_q->execute();
+$user_data = $user_q->get_result()->fetch_assoc();
+
+$user_id   = $user_data['id'] ?? 0;
+$username  = $user_data['name'] ?? 'Admin';
+$user_role = ucfirst($_SESSION['role']); // "Admin"
+$profile_pic = !empty($user_data['profile_pic']) ? "images/" . $user_data['profile_pic'] : "images/default.png";
 
 /* ==========================================
    2) LOGIC: ASSIGN NEW PROPOSAL
@@ -31,7 +45,6 @@ if (isset($_POST['assign_proposal'])) {
         $stmt->bind_param("ii", $prop_id, $reviewer_id);
 
         if ($stmt->execute()) {
-            // Update proposal status safely
             $up = $conn->prepare("UPDATE proposals SET status = 'ASSIGNED' WHERE id = ?");
             $up->bind_param("i", $prop_id);
             $up->execute();
@@ -60,7 +73,7 @@ if (isset($_POST['assign_proposal'])) {
 }
 
 /* ==========================================
-   3) LOGIC: ASSIGN APPEAL CASE (ROBUST FIX)
+   3) LOGIC: ASSIGN APPEAL CASE
    ========================================== */
 if (isset($_POST['assign_appeal'])) {
     $prop_id     = (int)($_POST['proposal_id'] ?? 0);
@@ -70,7 +83,6 @@ if (isset($_POST['assign_appeal'])) {
         $message  = "Error: Invalid appeal case or reviewer.";
         $msg_type = "error";
     } else {
-        // Check history
         $check_hist = $conn->prepare("SELECT id FROM reviews WHERE proposal_id = ? AND reviewer_id = ?");
         $check_hist->bind_param("ii", $prop_id, $reviewer_id);
 
@@ -93,7 +105,6 @@ if (isset($_POST['assign_appeal'])) {
                 $stmt->bind_param("ii", $prop_id, $reviewer_id);
 
                 if ($stmt->execute()) {
-                    // Update status & priority
                     $up = $conn->prepare("UPDATE proposals SET status = 'ASSIGNED', priority = 'High' WHERE id = ?");
                     $up->bind_param("i", $prop_id);
                     $up->execute();
@@ -124,116 +135,158 @@ if (isset($_POST['assign_appeal'])) {
 }
 
 /* ==========================================
-   4) FETCH DATA
+   4) FETCH COUNTS (for subtitles)
    ========================================== */
-$reviewers     = $conn->query("SELECT * FROM users WHERE role = 'Reviewer' ORDER BY name ASC");
-$new_proposals = $conn->query("SELECT * FROM proposals WHERE status = 'SUBMITTED'");
-$appeals       = $conn->query("SELECT * FROM proposals WHERE status = 'PENDING_REASSIGNMENT'");
+$new_proposals = $conn->query("SELECT COUNT(*) as c FROM proposals WHERE status = 'SUBMITTED'")->fetch_assoc()['c'];
+$pending_users = $conn->query("SELECT COUNT(*) as c FROM users WHERE status = 'PENDING'")->fetch_assoc()['c'];
+$appeals_count = $conn->query("SELECT COUNT(*) as c FROM proposals WHERE status = 'PENDING_REASSIGNMENT'")->fetch_assoc()['c'];
 
 /* Alert colors */
 $bg_color     = ($msg_type === 'error') ? '#f8d7da' : '#d4edda';
 $text_color   = ($msg_type === 'error') ? '#721c24' : '#155724';
 $border_color = ($msg_type === 'error') ? '#f5c6cb' : '#c3e6cb';
 ?>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Admin Dashboard</title>
-  <link rel="stylesheet" href="style.css" />
-  <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
+    <meta charset="UTF-8">
+    <title>Admin Dashboard</title>
+
+    <!-- Match reviewer_page includes -->
+    <link rel="stylesheet" href="styling/style.css">
+    <link rel="stylesheet" href="styling/dashboard.css">
+    <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
 </head>
 <body>
 
 <?php include 'sidebar.php'; ?>
 
 <section class="home-section">
-  <div class="welcome-text">Admin Dashboard</div>
-  <hr style="opacity: 0.3; margin: 20px 0;">
 
-  <!-- Alert -->
-  <?php if (!empty($message)): ?>
-    <div class="alert" style="background: <?= $bg_color ?>; color: <?= $text_color ?>; border: 1px solid <?= $border_color ?>; padding: 15px; margin-bottom: 20px; border-radius: 8px;">
-      <?= htmlspecialchars($message) ?>
+    <div class="dashboard-header-group">
+        <h1 class="main-title">Admin Dashboard</h1>
+
+        <div class="user-identity-row">
+            <img src="<?= htmlspecialchars($profile_pic) ?>" alt="Profile" class="identity-img">
+            <div class="identity-text">
+                <div class="identity-name"><?= htmlspecialchars($username) ?></div>
+                <div class="identity-role"><?= htmlspecialchars($user_role) ?></div>
+            </div>
+        </div>
     </div>
-  <?php endif; ?>
 
-  <!-- ALL cards in Windows Settings style -->
-  <div class="dashboard-cards">
+    <hr class="dashboard-divider">
 
-    <a class="dash-card" href="users_list.php">
-    <div class="dash-icon"><i class='bx bx-user'></i></div>
-    <div class="dash-text">
-        <h3>Total Users</h3>
-        <p class="dash-value">View Users</p>
+    <?php if (!empty($message)): ?>
+        <div class="alert" style="background: <?= $bg_color ?>; color: <?= $text_color ?>; border: 1px solid <?= $border_color ?>; padding: 15px; margin-bottom: 20px; border-radius: 8px;">
+            <?= htmlspecialchars($message) ?>
+        </div>
+    <?php endif; ?>
+
+    <div style="max-width: 800px;">
+
+        <a href="users_list.php" class="header-card">
+            <div class="header-left">
+                <div class="header-icon-box"><i class='bx bx-user'></i></div>
+                <div class="header-text-group">
+                    <h3>Manage Users</h3>
+                    <span>View all user accounts</span>
+                </div>
+            </div>
+            <i class='bx bx-chevron-right header-arrow'></i>
+        </a>
+
+        <a href="pending_users.php" class="header-card">
+            <div class="header-left">
+                <div class="header-icon-box"><i class='bx bx-user-check'></i></div>
+                <div class="header-text-group">
+                    <h3>User Approvals</h3>
+                    <span><?= (int)$pending_users ?> users pending approval</span>
+                </div>
+            </div>
+            <i class='bx bx-chevron-right header-arrow'></i>
+        </a>
+
+        <a href="proposals_list.php" class="header-card">
+            <div class="header-left">
+                <div class="header-icon-box"><i class='bx bx-file'></i></div>
+                <div class="header-text-group">
+                    <h3>Manage Proposals</h3>
+                    <span>View proposals list</span>
+                </div>
+            </div>
+            <i class='bx bx-chevron-right header-arrow'></i>
+        </a>
+
+        <a href="assign_new_proposal.php" class="header-card">
+            <div class="header-left">
+                <div class="header-icon-box"><i class='bx bx-task'></i></div>
+                <div class="header-text-group">
+                    <h3>Assign New Proposals</h3>
+                    <span><?= (int)$new_proposals ?> proposals waiting to assign</span>
+                </div>
+            </div>
+            <i class='bx bx-chevron-right header-arrow'></i>
+        </a>
+
+        <a href="assign_appeal_case.php" class="header-card">
+            <div class="header-left">
+                <div class="header-icon-box"><i class='bx bx-repost'></i></div>
+                <div class="header-text-group">
+                    <h3>Assign Appeal Cases</h3>
+                    <span><?= (int)$appeals_count ?> appeal cases pending reassignment</span>
+                </div>
+            </div>
+            <i class='bx bx-chevron-right header-arrow'></i>
+        </a>
+
+        <a href="grants_list.php" class="header-card">
+            <div class="header-left">
+                <div class="header-icon-box"><i class='bx bx-money'></i></div>
+                <div class="header-text-group">
+                    <h3>Manage Grants</h3>
+                    <span>View grants & details</span>
+                </div>
+            </div>
+            <i class='bx bx-chevron-right header-arrow'></i>
+        </a>
+
+        <a href="activity_logs.php" class="header-card">
+            <div class="header-left">
+                <div class="header-icon-box"><i class='bx bx-notepad'></i></div>
+                <div class="header-text-group">
+                    <h3>System Activity Logs</h3>
+                    <span>Track key actions in system</span>
+                </div>
+            </div>
+            <i class='bx bx-chevron-right header-arrow'></i>
+        </a>
+
+        <a href="help_issues.php" class="header-card">
+            <div class="header-left">
+                <div class="header-icon-box"><i class='bx bx-support'></i></div>
+                <div class="header-text-group">
+                    <h3>Help Issues</h3>
+                    <span>Handle help requests</span>
+                </div>
+            </div>
+            <i class='bx bx-chevron-right header-arrow'></i>
+        </a>
+
+        <a href="profile.php" class="header-card">
+            <div class="header-left">
+                <div class="header-icon-box"><i class='bx bx-user-circle'></i></div>
+                <div class="header-text-group">
+                    <h3>My Profile</h3>
+                    <span>Update account details</span>
+                </div>
+            </div>
+            <i class='bx bx-chevron-right header-arrow'></i>
+        </a>
+
     </div>
-    </a>
-
-
-    <a class="dash-card" href="proposals_list.php">
-      <div class="dash-icon"><i class='bx bx-file'></i></div>
-      <div class="dash-text">
-        <h3>Total Proposals</h3>
-        <p class="dash-value">View proposals list</p>
-      </div>
-    </a>
-
-    <a class="dash-card" href="grants_list.php">
-      <div class="dash-icon"><i class='bx bx-money'></i></div>
-      <div class="dash-text">
-        <h3>Total Grants</h3>
-        <p class="dash-value">View grants</p>
-      </div>
-    </a>
-
-    <a class="dash-card" href="activity_logs.php">
-      <div class="dash-icon"><i class='bx bx-notepad'></i></div>
-      <div class="dash-text">
-        <h3>System Activity Logs</h3>
-        <p class="dash-value">View logs</p>
-      </div>
-    </a>
-
-    <a class="dash-card" href="help_issues.php">
-    <div class="dash-icon"><i class='bx bx-support'></i></div>
-    <div class="dash-text">
-        <h3>Help Issues</h3>
-        <p class="dash-value">Handle help requests</p>
-    </div>
-    </a>
-
-
-    <a class="dash-card" href="pending_users.php">
-      <div class="dash-icon"><i class='bx bx-user-check'></i></div>
-      <div class="dash-text">
-        <h3>User Approvals</h3>
-        <p class="dash-value">Pending users</p>
-      </div>
-    </a>
-    
-
-    <a class="dash-card" href="assign_new_proposal.php">
-    <div class="dash-icon"><i class='bx bx-task'></i></div>
-    <div class="dash-text">
-      <h3>Assign New Proposal</h3>
-      <p class="dash-value"><?= (int)$new_proposals->num_rows ?> proposals waiting</p>
-    </div>
-  </a>
-
-
 </section>
-
-<script src="script.js"></script>
-<script>
-function toggleDashCard(bodyId, toggleId){
-  const body = document.getElementById(bodyId);
-  const toggle = document.getElementById(toggleId);
-  if(!body) return;
-
-  body.classList.toggle("hidden");
-  if(toggle) toggle.classList.toggle("open");
-}
-</script>
 
 </body>
 </html>
