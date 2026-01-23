@@ -630,6 +630,11 @@ if (isset($_POST['request_reimbursement'])) {
                     <button type="button" onclick="addMilestone()" class="btn-save" style="background: #17a2b8; border: none; padding: 12px 20px; margin-bottom: 25px; display: inline-flex; align-items: center; gap: 8px;">
                         <i class='bx bx-plus'></i> Add Another Milestone
                     </button>
+                    <div style="text-align: left; margin-top: 10px; border-top: 1px solid #eee; padding-top: 20px;">
+                        <button type="submit" name="submit_proposal" class="btn-save" style="font-size: 16px; padding: 12px 30px;">
+                            <i class='bx bx-paper-plane'></i> Submit Proposal
+                        </button>
+                    </div>
                 </form>
             </div>
 
