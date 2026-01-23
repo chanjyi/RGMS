@@ -1,6 +1,8 @@
 <?php
 session_start();
 require 'config.php';
+require 'activity_helper.php';
+
 
 if (!isset($_SESSION['email']) || $_SESSION['role'] != 'hod') {
     header('Location: index.php');

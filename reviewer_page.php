@@ -1,6 +1,8 @@
 <?php
 session_start();
 require 'config.php';
+require 'activity_helper.php';
+
 
 if (!isset($_SESSION['email']) || $_SESSION['role'] != 'reviewer') {
     header('Location: index.php');

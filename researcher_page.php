@@ -1,6 +1,8 @@
 <?php
 session_start();
 require 'config.php';
+require 'activity_helper.php';
+
 
 // Security Check
 if (!isset($_SESSION['email']) || $_SESSION['role'] != 'researcher') {
