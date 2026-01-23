@@ -15,6 +15,17 @@ $user = $stmt->get_result()->fetch_assoc();
 
 // DETERMINE IMAGE (Using 'profile_pic' column and 'images/' folder)
 $avatar_file = !empty($user['profile_pic']) ? "images/" . $user['profile_pic'] : "images/default.png";
+
+// DETERMINE DASHBOARD LINK BASED ON ROLE
+$dashboardLink = 'index.php';
+if (isset($user['role'])) {
+    switch ($user['role']) {
+        case 'admin': $dashboardLink = 'admin_page.php'; break;
+        case 'reviewer': $dashboardLink = 'reviewer_page.php'; break;
+        case 'hod': $dashboardLink = 'hod_page.php'; break;
+        case 'researcher': $dashboardLink = 'researcher_dashboard.php'; break;
+    }
+}
 ?>
 
 <!DOCTYPE html>
@@ -29,8 +40,14 @@ $avatar_file = !empty($user['profile_pic']) ? "images/" . $user['profile_pic'] :
     <?php include 'sidebar.php'; ?>
     <section class="home-section">
         
+        <a href="<?= $dashboardLink ?>" class="btn-back" style="display: inline-flex; align-items: center; text-decoration: none; color: #3C5B6F; font-weight: 600; margin-bottom: 15px;">
+            <i class='bx bx-left-arrow-alt' style="font-size: 20px; margin-right: 5px;"></i> 
+            Back to Dashboard
+        </a>
+
         <div class="welcome-text">My Profile</div>
-        <hr style="opacity: 0.3; margin: 20px 0;">
+        
+        <hr style="border: 1px solid #3C5B6F; opacity: 0.3; margin: 20px 0;">
 
         <div class="profile-container">
             

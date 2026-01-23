@@ -181,7 +181,7 @@ $email_on   = $user_data['notify_email'] ?? 1;
 
     <section class="home-section">
         <div class="welcome-text">Settings</div>
-        <hr style="opacity: 0.3; margin: 20px 0;">
+        <hr style="border: 1px solid #3C5B6F; opacity: 0.3; margin: 20px 0;">
         
         <div class="form-box" style="max-width: 800px; margin: 0 auto;">
 

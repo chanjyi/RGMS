@@ -1,5 +1,5 @@
 <?php
-// sidebar.php
+// sidebar1.php (Merged Version)
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
@@ -13,7 +13,7 @@ if (isset($_SESSION['role'])) {
         case 'admin': $dashboardLink = 'admin_page.php'; break;
         case 'reviewer': $dashboardLink = 'reviewer_page.php'; break;
         case 'hod': $dashboardLink = 'hod_page.php'; break;
-        case 'researcher': $dashboardLink = 'researcher_page.php'; break;
+        case 'researcher': $dashboardLink = 'researcher_dashboard.php'; break; // Updated to match friend's file
     }
 }
 
@@ -36,13 +36,29 @@ if (isset($_SESSION['email']) && isset($conn)) {
     <ul class="nav-list">
         
         <li>
-            <a href="<?= $dashboardLink ?>" class="<?= $current == $dashboardLink ? 'active' : '' ?>">
+            <a href="<?= $dashboardLink ?>" class="<?= $current == basename($dashboardLink) ? 'active' : '' ?>">
                 <i class='bx bx-grid-alt'></i>
                 <span class="links_name">Dashboard</span>
             </a>
             <span class="tooltip">Dashboard</span>
         </li>
 
+        <?php if (isset($_SESSION['role']) && $_SESSION['role'] == 'researcher'): ?>
+            <li>
+                <a href="researcher_page.php" class="<?= $current == 'researcher_page.php' ? 'active' : '' ?>">
+                    <i class='bx bx-file'></i>
+                    <span class="links_name">My Research</span>
+                </a>
+                <span class="tooltip">My Research</span>
+            </li>
+            <li>
+                <a href="researcher_analytics.php" class="<?= $current == 'researcher_analytics.php' ? 'active' : '' ?>">
+                    <i class='bx bx-bar-chart-alt-2'></i>
+                    <span class="links_name">Analytics</span>
+                </a>
+                <span class="tooltip">Analytics</span>
+            </li>
+        <?php endif; ?>
         <?php if (isset($_SESSION['role']) && $_SESSION['role'] == 'reviewer'): ?>
             <li>
                 <a href="reviewer_pending.php" class="<?= $current == 'reviewer_pending.php' ? 'active' : '' ?>">

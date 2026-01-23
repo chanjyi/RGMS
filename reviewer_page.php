@@ -98,6 +98,18 @@ $h_count = $conn->query("SELECT COUNT(*) as c FROM reviews WHERE reviewer_id = $
                 </div>
                 <i class='bx bx-chevron-right header-arrow'></i>
             </a>
+
+            <a href="profile.php" class="header-card">
+                <div class="header-left">
+                    <div class="header-icon-box"><i class='bx bx-user'></i></div>
+                    <div class="header-text-group">
+                        <h3>My Profile</h3>
+                        <span>Update account details</span>
+                    </div>
+                </div>
+                <i class='bx bx-chevron-right header-arrow'></i>
+            </a>
+
         </div>
     </section>
 </body>

@@ -50,7 +50,7 @@ $result = $stmt->get_result();
 
     <section class="home-section">
         <div class="welcome-text">Notifications Center</div>
-        <hr style="opacity: 0.3; margin: 20px 0;">
+        <hr style="border: 1px solid #3C5B6F; opacity: 0.3; margin: 20px 0;">
 
         <?php if ($message): ?>
             <div class="alert" style="background: #d4edda; color: #155724; padding: 15px; margin-bottom: 20px; border-radius: 5px;">
