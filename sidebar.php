@@ -1,5 +1,6 @@
 <?php
 // sidebar.php (Merged Version + Admin Menu)
+// sidebar1.php (Merged Version)
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
@@ -8,6 +9,7 @@ $current = basename($_SERVER['PHP_SELF']);
 
 // Determine the correct dashboard link
 $dashboardLink = 'index.php';
+$dashboardLink = 'index.php'; 
 if (isset($_SESSION['role'])) {
     switch ($_SESSION['role']) {
         case 'admin': $dashboardLink = 'admin_page.php'; break;
@@ -15,6 +17,7 @@ if (isset($_SESSION['role'])) {
         case 'hod': $dashboardLink = 'hod_page.php'; break;
         case 'researcher': $dashboardLink = 'researcher_dashboard.php'; break;
         default: $dashboardLink = 'index.php';
+        case 'researcher': $dashboardLink = 'researcher_dashboard.php'; break; // Updated to match friend's file
     }
 }
 
@@ -31,7 +34,7 @@ if (isset($_SESSION['email']) && isset($conn)) {
    Admin badges (optional)
    ========================= */
 $pending_users = 0;
-$new_proposals = 0;
+$new_proposals_count = 0;
 
 if (isset($_SESSION['role']) && $_SESSION['role'] === 'admin') {
     // users pending approval
@@ -52,6 +55,7 @@ if (isset($_SESSION['role']) && $_SESSION['role'] === 'admin') {
 
     <ul class="nav-list">
 
+        
         <li>
             <a href="<?= $dashboardLink ?>" class="<?= $current == basename($dashboardLink) ? 'active' : '' ?>">
                 <i class='bx bx-grid-alt'></i>
@@ -98,9 +102,10 @@ if (isset($_SESSION['role']) && $_SESSION['role'] === 'admin') {
                     <i class='bx bx-task'></i>
                     <span class="links_name">Assign New Proposals</span>
 
-                    <?php if ($new_proposals > 0): ?>
-                        <span class="notif-badge"><?= $new_proposals ?></span>
+                    <?php if ($new_proposals_count > 0): ?>
+                        <span class="notif-badge"><?= $new_proposals_count ?></span>
                     <?php endif; ?>
+
                 </a>
                 <span class="tooltip">Assign New Proposals</span>
             </li>
@@ -234,7 +239,7 @@ if (isset($_SESSION['role']) && $_SESSION['role'] === 'admin') {
             <span class="tooltip">Notifications</span>
         </li>
 
-        <li class="profile">
+        <li class="profile"> 
             <a href="logout.php">
                 <i class='bx bx-log-out' id="log_out"></i>
                 <span class="links_name">Logout</span>
@@ -254,5 +259,10 @@ if (isset($_SESSION['role']) && $_SESSION['role'] === 'admin') {
         const overlay = document.getElementById("overlay");
         sidebar.classList.toggle("open");
         overlay.style.display = sidebar.classList.contains("open") ? "block" : "none";
+        if (sidebar.classList.contains("open")) {
+            overlay.style.display = "block";
+        } else {
+            overlay.style.display = "none";
+        }
     }
 </script>

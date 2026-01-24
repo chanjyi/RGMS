@@ -1,18 +1,17 @@
 <?php
-// get_milestones.php - Helper file for loading milestones via AJAX
+// get_budget_categories.php - Fetch budget categories for a specific grant
 session_start();
 require 'config.php';
 
 header('Content-Type: application/json');
 
-// 1. Security check (From both files, improved with HTTP 401)
+// Security check
 if (!isset($_SESSION['email']) || $_SESSION['role'] != 'researcher') {
     http_response_code(401);
     echo json_encode(['error' => 'Unauthorized access']);
     exit();
 }
 
-// 2. Input Validation (From get_milestones.php)
 if (!isset($_GET['grant_id']) || empty($_GET['grant_id'])) {
     http_response_code(400);
     echo json_encode(['error' => 'Grant ID is required']);
@@ -22,6 +21,7 @@ if (!isset($_GET['grant_id']) || empty($_GET['grant_id'])) {
 $grant_id = intval($_GET['grant_id']);
 $email = $_SESSION['email'];
 
+// Validate grant_id is a positive integer
 if ($grant_id <= 0) {
     http_response_code(400);
     echo json_encode(['error' => 'Invalid Grant ID']);
@@ -29,7 +29,7 @@ if ($grant_id <= 0) {
 }
 
 try {
-    // 3. Ownership Verification
+    // Verify this grant belongs to the researcher and is approved
     $verify = $conn->prepare("SELECT id FROM proposals WHERE id = ? AND researcher_email = ? AND status = 'APPROVED'");
     $verify->bind_param("is", $grant_id, $email);
     $verify->execute();
@@ -41,33 +41,28 @@ try {
         exit();
     }
 
-    // 4. Fetch Milestones
-    $query = $conn->prepare("SELECT id, title, description, target_date, completion_date, status FROM milestones WHERE grant_id = ? ORDER BY target_date ASC");
+    // Fetch budget categories for this grant
+    $query = $conn->prepare("
+        SELECT id, category, description, allocated_amount, spent_amount 
+        FROM budget_items 
+        WHERE proposal_id = ? 
+        ORDER BY category ASC
+    ");
     $query->bind_param("i", $grant_id);
     $query->execute();
     $result = $query->get_result();
 
-    $milestones = [];
+    $categories = [];
     while ($row = $result->fetch_assoc()) {
-        // Feature from get_milestones.php: Pre-format dates for the frontend
-        $row['target_date_formatted'] = date('M d, Y', strtotime($row['target_date']));
-        
-        if ($row['completion_date']) {
-            $row['completion_date_formatted'] = date('M d, Y', strtotime($row['completion_date']));
-        } else {
-            $row['completion_date_formatted'] = '-';
-        }
-        
-        $milestones[] = $row;
+        $categories[] = $row;
     }
 
     http_response_code(200);
-    echo json_encode($milestones);
+    echo json_encode($categories);
 
 } catch (Exception $e) {
-    // Error logging (From get_milestones.php)
-    error_log("Error fetching milestones: " . $e->getMessage());
+    error_log("Error fetching budget categories: " . $e->getMessage());
     http_response_code(500);
-    echo json_encode(['error' => 'An error occurred while fetching milestones']);
+    echo json_encode(['error' => 'An error occurred while fetching budget categories']);
 }
 ?>

@@ -1,17 +1,21 @@
 <?php
 session_start();
 
-// 1. CAPTURE & CLEAR ERRORS
-// We check if the backend (login_register.php) set any error messages
-$globalError = '';
+// 1. CAPTURE & CLEAR MESSAGES
+$alertMessage = '';
+$alertType = ''; // Will be 'success' or 'error'
+
 if (isset($_SESSION['login_error'])) {
-    $globalError = $_SESSION['login_error'];
+    $alertMessage = $_SESSION['login_error'];
+    $alertType = 'error'; // Default Red
     unset($_SESSION['login_error']);
 } elseif (isset($_SESSION['register_error'])) {
-    $globalError = $_SESSION['register_error'];
+    $alertMessage = $_SESSION['register_error'];
+    $alertType = 'error'; // Default Red
     unset($_SESSION['register_error']);
 } elseif (isset($_SESSION['message'])) {
-    $globalError = $_SESSION['message'];
+    $alertMessage = $_SESSION['message'];
+    $alertType = 'success'; // Green (matches your new CSS)
     unset($_SESSION['message']);
 }
 ?>
@@ -21,7 +25,7 @@ if (isset($_SESSION['login_error'])) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Research Grant Management System</title>
-    <link rel="stylesheet" href="loginpage.css">
+    <link rel="stylesheet" href="styling/loginpage.css">
     <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
     <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
 </head>
@@ -37,14 +41,15 @@ if (isset($_SESSION['login_error'])) {
         </nav>
     </header>
 
-    <?php if ($globalError): ?>
-    <div class="global-alert" id="globalAlert">
-        <span class="alert-icon"><ion-icon name="alert-circle"></ion-icon></span>
-        <span class="alert-text"><?php echo htmlspecialchars($globalError); ?></span>
+    <?php if ($alertMessage): ?>
+    <div class="global-alert <?php echo $alertType; ?>" id="globalAlert">
+        <span class="alert-icon">
+            <ion-icon name="<?php echo ($alertType === 'success') ? 'checkmark-circle' : 'alert-circle'; ?>"></ion-icon>
+        </span>
+        <span class="alert-text"><?php echo htmlspecialchars($alertMessage); ?></span>
         <span class="close-btn" onclick="document.getElementById('globalAlert').style.display='none';">&times;</span>
     </div>
     <?php endif; ?>
-
     <section class="hero">
         <div class="hero-text">
             <h1>Manage Research Grants<br>Confidently !</h1>

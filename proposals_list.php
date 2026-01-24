@@ -22,7 +22,8 @@ while($r = $q->fetch_assoc()){
 <head>
 <meta charset="UTF-8">
 <title>Admin | Proposals</title>
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="styling/style.css">
+<link rel="stylesheet" href="styling/dashboard.css">
 <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
@@ -124,9 +125,10 @@ while($r = $q->fetch_assoc()){
   </div>
   <hr style="border:1px solid #3C5B6F;opacity:.3">
 
-  <button class="btn-return" onclick="location.href='admin_page.php'">
-    <i class='bx bx-arrow-back'></i> Return
-  </button>
+  <a href="<?= $dashboardLink ?>" class="btn-back" style="display: inline-flex; align-items: center; text-decoration: none; color: #3C5B6F; font-weight: 600; margin-bottom: 15px;">
+            <i class='bx bx-left-arrow-alt' style="font-size: 20px; margin-right: 5px;"></i> 
+            Back to Dashboard
+        </a>
 
   <!-- TABS -->
   <div style="margin-top:20px">

@@ -12,7 +12,7 @@ $message  = "";
 $msg_type = ""; // success | error
 
 /* =========================
-   HANDLE ASSIGN NEW PROPOSAL
+   1) HANDLE ASSIGN NEW PROPOSAL
    ========================= */
 if (isset($_POST['assign_proposal'])) {
     $prop_id     = (int)($_POST['proposal_id'] ?? 0);
@@ -49,7 +49,7 @@ if (isset($_POST['assign_proposal'])) {
                 $notif->execute();
             }
 
-            // Redirect (prevents double-submit on refresh)
+            // Redirect (prevents double submit refresh)
             header("Location: assign_new_proposal.php?success=1");
             exit();
         } else {
@@ -60,7 +60,7 @@ if (isset($_POST['assign_proposal'])) {
 }
 
 /* =========================
-   SUCCESS MESSAGE
+   2) SUCCESS MESSAGE
    ========================= */
 if (isset($_GET['success'])) {
     $message  = "Proposal assigned successfully!";
@@ -68,10 +68,15 @@ if (isset($_GET['success'])) {
 }
 
 /* =========================
-   FETCH DATA
+   3) FETCH DATA
+   IMPORTANT: use unique variable names to avoid sidebar.php overriding them
    ========================= */
-$reviewers     = $conn->query("SELECT * FROM users WHERE role = 'Reviewer' ORDER BY name ASC");
-$new_proposals = $conn->query("SELECT * FROM proposals WHERE status = 'SUBMITTED'");
+
+// If your database stores role as 'reviewer' (lowercase), keep it lowercase
+$reviewers_rs = $conn->query("SELECT id, name FROM users WHERE role = 'reviewer' ORDER BY name ASC");
+
+// For proposals waiting assignment
+$proposals_rs = $conn->query("SELECT id, title, researcher_email FROM proposals WHERE status = 'SUBMITTED' ORDER BY id DESC");
 
 /* Alert colors */
 $bg_color     = ($msg_type === 'error') ? '#f8d7da' : '#d4edda';
@@ -83,7 +88,8 @@ $border_color = ($msg_type === 'error') ? '#f5c6cb' : '#c3e6cb';
 <head>
     <meta charset="UTF-8">
     <title>Admin | Assign New Proposal</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="styling/style.css">
+    <link rel="stylesheet" href="styling/dashboard.css">
     <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
 </head>
 <body>
@@ -92,7 +98,7 @@ $border_color = ($msg_type === 'error') ? '#f5c6cb' : '#c3e6cb';
 
 <section class="home-section">
 
-    <!-- Same header style as Users page -->
+    <!-- Header (same style as your Users page) -->
     <div class="welcome-text">
         <i class='bx bx-task' style="font-size:24px; vertical-align:middle;"></i>
         Admin Dashboard | Assign New Proposal
@@ -100,11 +106,12 @@ $border_color = ($msg_type === 'error') ? '#f5c6cb' : '#c3e6cb';
 
     <hr style="border: 1px solid #3C5B6F; opacity: 0.3; margin-bottom: 25px;">
 
-    <!-- Return button: same style as Users page -->
+    <!-- Return button (same style as Users page) -->
     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:15px;">
-        <button class="btn-return" onclick="window.location.href='admin_page.php'">
-            <i class='bx bx-arrow-back'></i> Return
-        </button>
+        <a href="<?= $dashboardLink ?>" class="btn-back" style="display: inline-flex; align-items: center; text-decoration: none; color: #3C5B6F; font-weight: 600; margin-bottom: 15px;">
+            <i class='bx bx-left-arrow-alt' style="font-size: 20px; margin-right: 5px;"></i> 
+            Back to Dashboard
+        </a>
     </div>
 
     <!-- Alert -->
@@ -114,18 +121,18 @@ $border_color = ($msg_type === 'error') ? '#f5c6cb' : '#c3e6cb';
         </div>
     <?php endif; ?>
 
-    <!-- Form box -->
-    <div class="form-box">
+    <!-- Form Box -->
+    <div class="form-box" style="max-width: 700px;">
         <h3 style="color:#3C5B6F; margin-top:0;">
             <i class='bx bx-user-plus'></i> Assign Proposal to Reviewer
         </h3>
 
-        <?php if ($new_proposals && $new_proposals->num_rows > 0): ?>
+        <?php if ($proposals_rs && $proposals_rs->num_rows > 0): ?>
             <form method="POST">
                 <div class="input-group">
                     <label>Proposal</label>
                     <select name="proposal_id" required>
-                        <?php while($row = $new_proposals->fetch_assoc()): ?>
+                        <?php while($row = $proposals_rs->fetch_assoc()): ?>
                             <option value="<?= (int)$row['id'] ?>">
                                 <?= htmlspecialchars($row['title']) ?> (<?= htmlspecialchars($row['researcher_email']) ?>)
                             </option>
@@ -137,13 +144,17 @@ $border_color = ($msg_type === 'error') ? '#f5c6cb' : '#c3e6cb';
                     <label>Reviewer</label>
                     <select name="reviewer_id" required>
                         <option value="">-- Choose Reviewer --</option>
-                        <?php if ($reviewers): ?>
-                            <?php while($r = $reviewers->fetch_assoc()): ?>
+
+                        <?php if ($reviewers_rs && $reviewers_rs->num_rows > 0): ?>
+                            <?php while($r = $reviewers_rs->fetch_assoc()): ?>
                                 <option value="<?= (int)$r['id'] ?>">
                                     <?= htmlspecialchars($r['name']) ?>
                                 </option>
                             <?php endwhile; ?>
+                        <?php else: ?>
+                            <option value="" disabled>No reviewers found</option>
                         <?php endif; ?>
+
                     </select>
                 </div>
 

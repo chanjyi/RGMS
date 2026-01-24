@@ -152,11 +152,8 @@ $border_color = ($msg_type === 'error') ? '#f5c6cb' : '#c3e6cb';
 <head>
     <meta charset="UTF-8">
     <title>Admin Dashboard</title>
-
-    <!-- Match reviewer_page includes -->
-    <link rel="stylesheet" href="/RGMS/RGMS/style.css">
-    <link rel="stylesheet" href="/RGMS/RGMS/dashboard.css">
-
+    <link rel="stylesheet" href="styling/style.css">
+    <link rel="stylesheet" href="styling/dashboard.css">
     <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
 </head>
 <body>
