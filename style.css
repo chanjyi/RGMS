@@ -1031,143 +1031,7 @@ textarea {
     animation: fadeIn 0.5s ease forwards;
 }
 
-/* Dashcard that can expand */
-.dash-card-expand{
-  position: relative;
-  display: block;            /* so it behaves like a container */
-  text-decoration: none;
-}
-
-.dash-action{
-  position: absolute;
-  right: 15px;
-  top: 15px;
-  border: none;
-  padding: 8px 12px;
-  border-radius: 8px;
-  cursor: pointer;
-  font-weight: 600;
-}
-
-/* collapsible body inside card */
-.dash-body{
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid rgba(0,0,0,0.08);
-}
-
-.hidden{
-  display: none;
-}
-
-/* =========================================
-   Dashboard list layout (Windows Settings)
-   ========================================= */
-.dashboard-cards{
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-/* Make ALL dashcards look like Windows Settings rows */
-.dash-card,
-.settings-item{
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 16px;
-  border-radius: 10px;
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
-  cursor: pointer;
-  transition: background 0.2s ease, box-shadow 0.2s ease;
-  text-decoration: none;
-}
-
-.dash-card:hover,
-.settings-item:hover{
-  background: #f5f7fa;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.05);
-}
-
-/* Left icon block */
-.dash-icon,
-.settings-icon{
-  font-size: 22px;
-  color: #2563eb;
-  margin-right: 14px;
-  display: flex;
-  align-items: center;
-}
-
-/* Text block (title + subtitle/value) */
-.dash-text,
-.settings-text{
-  flex: 1;
-}
-
-.dash-text h3,
-.settings-title{
-  margin: 0;
-  font-weight: 600;
-  color: #111827;
-  font-size: 15px;
-}
-
-.dash-value,
-.settings-desc{
-  margin: 2px 0 0;
-  font-size: 13px;
-  color: #6b7280;
-}
-
-/* Right arrow */
-.dash-card::after{
-  content: "›";
-  font-size: 22px;
-  color: #9ca3af;
-  margin-left: 12px;
-}
-
-/* =========================================
-   Collapsible body (for forms inside a row)
-   ========================================= */
-.dash-body{
-  margin-top: 10px;
-  padding-top: 12px;
-  border-top: 1px solid rgba(0,0,0,0.08);
-}
-
-.hidden{
-  display: none;
-}
-
-/* Optional: Rotate arrow icon when open (for settings-item only) */
-.settings-arrow i{
-  transition: transform 0.2s ease;
-}
-.settings-item.open .settings-arrow i{
-  transform: rotate(90deg);
-}
-.settings-arrow{
-  font-size: 20px;
-  color: #9ca3af;
-  display: flex;
-  align-items: center;
-  margin-left: 12px;
-}
-
-/* Optional: make expandable container not look like clickable link */
-.dash-card-expand{
-  flex-direction: column;
-  align-items: stretch;
-  cursor: default;
-}
-.dash-card-expand:hover{
-  background: #ffffff;
-  box-shadow: none;
-}
-
+/* admin page button */
 .btn-return{
   background: #3C5B6F;
   color: white;
@@ -1203,4 +1067,80 @@ textarea {
 @keyframes fadeIn {
     from { opacity: 0; }
     to { opacity: 1; }
+}
+
+/* ===========================
+   SIDEBAR COMPACT FIXES
+   =========================== */
+
+/* 1. Reset the container to handle spacing properly */
+.sidebar .nav-list {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 60px); /* Use viewport height to ensure it fits screen */
+    padding-bottom: 20px;
+    margin-top: 10px; /* Reduced top margin */
+    overflow-y: auto; /* Enable scroll if screen is too short */
+    overflow-x: hidden;
+}
+
+/* Hide scrollbar */
+.sidebar .nav-list::-webkit-scrollbar {
+    display: none;
+}
+
+/* 2. Remove extra gaps between buttons */
+.sidebar li {
+    position: relative;
+    margin: 2px 0; /* Reduced from 8px to 2px for tighter spacing */
+    list-style: none;
+}
+
+/* 3. Make the buttons shorter (Compact Height) */
+.sidebar li a {
+    display: flex;
+    height: 100%;
+    width: 100%;
+    border-radius: 12px;
+    align-items: center;
+    text-decoration: none;
+    transition: all 0.4s ease;
+    background: #3C5B6F;
+}
+
+/* 4. Adjust Icon Size & Line Height to be smaller */
+.sidebar li a i {
+    color: #fff;
+    height: 40px; /* Reduced from 50px */
+    min-width: 50px;
+    font-size: 18px; /* Slightly smaller icon */
+    text-align: center;
+    line-height: 40px; /* Centering vertically */
+}
+
+/* 5. LOGOUT BUTTON (Sticks to Bottom) */
+.sidebar li.profile {
+    margin-top: auto !important;     /* Pushes button to the very bottom */
+    margin-bottom: 10px !important;  /* Small space from bottom edge */
+    background: #DFD0B8 !important;  /* Beige Background */
+    border-radius: 12px !important;  
+    transition: all 0.3s ease;
+    height: 50px; /* Fixed height for logout button */
+    display: flex;
+    align-items: center;
+}
+
+/* Keep logout styles specific */
+.sidebar li.profile a {
+    background: transparent !important;
+    height: 100%;
+}
+.sidebar li.profile a i {
+    color: #3C5B6F !important;
+    height: 50px;
+    line-height: 50px;
+}
+.sidebar li.profile .links_name {
+    color: #3C5B6F !important;
+    font-weight: 700;
 }

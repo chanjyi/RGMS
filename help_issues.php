@@ -12,12 +12,11 @@ $admin_email = $_SESSION['email'];
 $message = "";
 $msg_type = "";
 
-/* ========= Handle Actions ========= */
+/* ========= Handle Actions (Report Action) ========= */
 if (isset($_POST['report_action'], $_POST['report_id'])) {
     $report_id = (int)$_POST['report_id'];
     $action = $_POST['report_action'];
 
-    // Fetch report target (who is accused / related)
     $rep_stmt = $conn->prepare("SELECT id, reviewer_email, researcher_email, status FROM misconduct_reports WHERE id = ?");
     $rep_stmt->bind_param("i", $report_id);
     $rep_stmt->execute();
@@ -28,8 +27,7 @@ if (isset($_POST['report_action'], $_POST['report_id'])) {
         $msg_type = "error";
         $message = "Report not found.";
     } else {
-
-        // Decide target email: (example: researcher is the reported person; adjust as your system logic)
+        // adjust if your "target" is different
         $target_email = $rep['researcher_email'];
 
         if ($action === 'mark_resolved') {
@@ -42,9 +40,6 @@ if (isset($_POST['report_action'], $_POST['report_id'])) {
             $message = "Report marked as resolved.";
 
         } elseif ($action === 'remove_user') {
-            // Remove user (dangerous): usually set status = inactive instead of delete.
-            // If you have no 'status' column in users for active/inactive, you can DELETE.
-            // Recommended: add users.account_status (ACTIVE/REMOVED).
             $del = $conn->prepare("DELETE FROM users WHERE email=?");
             $del->bind_param("s", $target_email);
             $del->execute();
@@ -59,7 +54,6 @@ if (isset($_POST['report_action'], $_POST['report_id'])) {
             $message = "User removed and action recorded.";
 
         } elseif ($action === 'warn_user') {
-            // Optional: send notification if you have notifications table
             $warnMsg = "Admin Warning: Please review your recent activity. Report ID: #".$report_id;
             $notif = $conn->prepare("INSERT INTO notifications (user_email, message) VALUES (?, ?)");
             $notif->bind_param("ss", $target_email, $warnMsg);
@@ -80,35 +74,103 @@ if (isset($_POST['report_action'], $_POST['report_id'])) {
     }
 }
 
-/* ========= Handle Send Message ========= */
-if (isset($_POST['send_message'], $_POST['report_id'], $_POST['chat_message'])) {
-    $report_id = (int)$_POST['report_id'];
-    $chat_message = trim($_POST['chat_message']);
+/* ========= Upload Helpers ========= */
+function ensure_dir($path) {
+    if (!is_dir($path)) {
+        mkdir($path, 0777, true);
+    }
+}
 
-    if ($report_id > 0 && $chat_message !== '') {
+function safe_filename($name) {
+    $name = preg_replace('/[^a-zA-Z0-9._-]/', '_', $name);
+    return $name ?: ("file_" . time());
+}
+
+function process_upload_group($conn, $message_id, $files, $absUploadDir, $relUploadDir) {
+    if (!isset($files['name']) || empty($files['name'][0])) return;
+
+    $allowedExt = ['jpg','jpeg','png','gif','pdf','doc','docx','xls','xlsx','ppt','pptx','txt','zip'];
+    $maxSize = 10 * 1024 * 1024; // 10MB each
+
+    $count = count($files['name']);
+    for ($i = 0; $i < $count; $i++) {
+        if (($files['error'][$i] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) continue;
+
+        $origName = $files['name'][$i];
+        $tmpPath  = $files['tmp_name'][$i];
+        $size     = (int)($files['size'][$i] ?? 0);
+
+        if ($size <= 0 || $size > $maxSize) continue;
+
+        $ext = strtolower(pathinfo($origName, PATHINFO_EXTENSION));
+        if (!in_array($ext, $allowedExt)) continue;
+
+        $safeOrig = safe_filename($origName);
+        $unique = $message_id . "_" . time() . "_" . bin2hex(random_bytes(4)) . "_" . $safeOrig;
+
+        $absPath = rtrim($absUploadDir, "/\\") . DIRECTORY_SEPARATOR . $unique;
+        $relPath = rtrim($relUploadDir, "/") . "/" . $unique;
+
+        if (move_uploaded_file($tmpPath, $absPath)) {
+            $mime = @mime_content_type($absPath);
+            if ($mime === false) $mime = null;
+
+            $att = $conn->prepare("
+                INSERT INTO issue_attachments (message_id, file_path, original_name, mime_type)
+                VALUES (?, ?, ?, ?)
+            ");
+            $att->bind_param("isss", $message_id, $relPath, $origName, $mime);
+            $att->execute();
+            $att->close();
+        }
+    }
+}
+
+/* ========= Handle Send Message (with attachments) ========= */
+if (isset($_POST['send_message'], $_POST['report_id'])) {
+    $report_id = (int)$_POST['report_id'];
+    $chat_message = trim($_POST['chat_message'] ?? '');
+
+    $hasFiles =
+        (!empty($_FILES['attachments']['name'][0]) ||
+         !empty($_FILES['folder_attachments']['name'][0]));
+
+    if ($report_id <= 0 || ($chat_message === '' && !$hasFiles)) {
+        $msg_type = "error";
+        $message = "Message cannot be empty (unless you attach files).";
+    } else {
         $ins = $conn->prepare("
             INSERT INTO issue_messages (report_id, sender_role, sender_email, message)
             VALUES (?, 'admin', ?, ?)
         ");
         $ins->bind_param("iss", $report_id, $admin_email, $chat_message);
         $ins->execute();
+        $message_id = $conn->insert_id;
         $ins->close();
+
+        $absUploadDir = __DIR__ . "/uploads/issues";
+        $relUploadDir = "uploads/issues";
+        ensure_dir($absUploadDir);
+
+        if (isset($_FILES['attachments'])) {
+            process_upload_group($conn, $message_id, $_FILES['attachments'], $absUploadDir, $relUploadDir);
+        }
+        if (isset($_FILES['folder_attachments'])) {
+            process_upload_group($conn, $message_id, $_FILES['folder_attachments'], $absUploadDir, $relUploadDir);
+        }
 
         $msg_type = "success";
         $message = "Message sent.";
-    } else {
-        $msg_type = "error";
-        $message = "Message cannot be empty.";
     }
 }
 
 /* ========= Fetch Reports ========= */
 $reports_q = $conn->query("SELECT * FROM misconduct_reports ORDER BY created_at DESC");
 
-/* ========= For Communication Tab: choose report ========= */
+/* ========= For Communication Tab ========= */
 $selected_report_id = (int)($_GET['report_id'] ?? 0);
 $selected_report = null;
-$chat_q = null;
+$chat_res = null;
 
 if ($selected_report_id > 0) {
     $st = $conn->prepare("SELECT * FROM misconduct_reports WHERE id=?");
@@ -166,16 +228,42 @@ $border_color = ($msg_type === 'error') ? '#f5c6cb' : '#c3e6cb';
     .bubble { max-width:70%; padding:10px 12px; border-radius:12px; margin:8px 0; font-size:14px; line-height:1.3; }
     .bubble.admin { background:#3C5B6F; color:#fff; margin-left:auto; border-bottom-right-radius:4px; }
     .bubble.user { background:#fff; border:1px solid #eee; color:#222; margin-right:auto; border-bottom-left-radius:4px; }
-    .chat-time { font-size:11px; opacity:0.7; margin-top:4px; }
+    .chat-time { font-size:11px; opacity:0.7; margin-top:6px; }
 
-    .chat-input { display:flex; gap:10px; padding:12px; border-top:1px solid #f1f1f1; background:#fff; }
+    /* input row */
+    .chat-input { display:flex; gap:10px; padding:12px; border-top:1px solid #f1f1f1; background:#fff; align-items:center; }
     .chat-input textarea { flex:1; resize:none; height:44px; padding:10px 12px; border-radius:10px; border:1px solid #ddd; }
-    .chat-input button { min-width:110px; border:none; border-radius:10px; background:#28a745; color:#fff; font-weight:700; cursor:pointer; }
-    .chat-input button:hover { opacity:0.9; }
+
+    .chat-attach { display:flex; align-items:center; gap:8px; }
+    .attach-btn {
+      width: 42px; height: 42px;
+      border-radius: 50%;
+      border: none;
+      background: #3C5B6F;
+      color: #fff;
+      font-size: 22px;
+      cursor: pointer;
+      display:flex; align-items:center; justify-content:center;
+    }
+    .attach-btn:hover { background: #2f4a59; }
+    .file-count { font-size:12px; color:#666; white-space:nowrap; }
+
+    .chat-input button.send-btn {
+      min-width:110px;
+      border:none;
+      border-radius:10px;
+      background:#28a745;
+      color:#fff;
+      font-weight:700;
+      cursor:pointer;
+      height:44px;
+    }
+    .chat-input button.send-btn:hover { opacity:0.9; }
 
     @media(max-width: 1100px){
       .chat-wrap{ grid-template-columns:1fr; }
       .chat-box{ height:520px; }
+      .file-count{ display:none; }
     }
   </style>
 </head>
@@ -212,7 +300,7 @@ $border_color = ($msg_type === 'error') ? '#f5c6cb' : '#c3e6cb';
     </button>
   </div>
 
-  <!-- TAB 1: REPORTS TABLE -->
+  <!-- TAB 1 -->
   <div id="reportsTab" class="tab-content active">
     <h3 style="color:#3C5B6F; margin-top:0;"><i class='bx bx-list-ul'></i> Misconduct / Help Reports</h3>
 
@@ -272,7 +360,7 @@ $border_color = ($msg_type === 'error') ? '#f5c6cb' : '#c3e6cb';
     </table>
   </div>
 
-  <!-- TAB 2: CHAT -->
+  <!-- TAB 2 -->
   <div id="chatTab" class="tab-content">
     <h3 style="color:#3C5B6F; margin-top:0;"><i class='bx bx-message-dots'></i> Communication</h3>
 
@@ -281,7 +369,6 @@ $border_color = ($msg_type === 'error') ? '#f5c6cb' : '#c3e6cb';
       <!-- Left list -->
       <div class="chat-list">
         <?php
-          // list all reports as "threads"
           $list_q = $conn->query("SELECT id, category, reviewer_email, researcher_email, status, created_at FROM misconduct_reports ORDER BY created_at DESC");
           if ($list_q && $list_q->num_rows > 0):
             while($t = $list_q->fetch_assoc()):
@@ -297,12 +384,9 @@ $border_color = ($msg_type === 'error') ? '#f5c6cb' : '#c3e6cb';
               <?= htmlspecialchars($t['status'] ?? '-') ?> • <?= htmlspecialchars($t['created_at'] ?? '-') ?>
             </div>
           </div>
-        <?php
-            endwhile;
-          else:
-            echo "<div class='item'>No report threads.</div>";
-          endif;
-        ?>
+        <?php endwhile; else: ?>
+          <div class="item">No report threads.</div>
+        <?php endif; ?>
       </div>
 
       <!-- Right chat box -->
@@ -321,7 +405,45 @@ $border_color = ($msg_type === 'error') ? '#f5c6cb' : '#c3e6cb';
               <?php while($m = $chat_res->fetch_assoc()): ?>
                 <?php $isAdmin = (strtolower($m['sender_role']) === 'admin'); ?>
                 <div class="bubble <?= $isAdmin ? 'admin' : 'user' ?>">
-                  <?= nl2br(htmlspecialchars($m['message'])) ?>
+                  <?php if (!empty($m['message'])): ?>
+                    <?= nl2br(htmlspecialchars($m['message'])) ?>
+                  <?php endif; ?>
+
+                  <?php
+                    $att_q = $conn->prepare("SELECT * FROM issue_attachments WHERE message_id=?");
+                    $att_q->bind_param("i", $m['id']);
+                    $att_q->execute();
+                    $att_res = $att_q->get_result();
+                  ?>
+
+                  <?php if ($att_res && $att_res->num_rows > 0): ?>
+                    <div style="margin-top:8px;">
+                      <?php while($a = $att_res->fetch_assoc()):
+                        $path = $a['file_path'];
+                        $name = $a['original_name'];
+                        $mime = $a['mime_type'] ?? '';
+                        $isImg = (strpos($mime, 'image/') === 0);
+                      ?>
+                        <div style="margin-top:6px;">
+                          <?php if ($isImg): ?>
+                            <a href="<?= htmlspecialchars($path) ?>" target="_blank" style="display:inline-block; text-decoration:none;">
+                              <img src="<?= htmlspecialchars($path) ?>" alt="<?= htmlspecialchars($name) ?>"
+                                   style="max-width:220px; border-radius:10px; border:1px solid #eee;">
+                            </a>
+                            <div style="font-size:12px; opacity:0.85;"><?= htmlspecialchars($name) ?></div>
+                          <?php else: ?>
+                            <a href="<?= htmlspecialchars($path) ?>" target="_blank"
+                               style="text-decoration:underline; font-size:13px; color:inherit;">
+                               📎 <?= htmlspecialchars($name) ?>
+                            </a>
+                          <?php endif; ?>
+                        </div>
+                      <?php endwhile; ?>
+                    </div>
+                  <?php endif; ?>
+
+                  <?php $att_q->close(); ?>
+
                   <div class="chat-time">
                     <?= htmlspecialchars($m['sender_email']) ?> • <?= htmlspecialchars($m['created_at']) ?>
                   </div>
@@ -336,10 +458,27 @@ $border_color = ($msg_type === 'error') ? '#f5c6cb' : '#c3e6cb';
         </div>
 
         <?php if ($selected_report): ?>
-          <form method="POST" class="chat-input">
+          <form method="POST" class="chat-input" enctype="multipart/form-data">
             <input type="hidden" name="report_id" value="<?= (int)$selected_report['id'] ?>">
-            <textarea name="chat_message" placeholder="Type a reply..." required></textarea>
-            <button type="submit" name="send_message">Send</button>
+
+            <textarea name="chat_message" placeholder="Type a reply... (or attach files)"></textarea>
+
+            <div class="chat-attach">
+              <input type="file" id="fileInput" name="attachments[]" multiple
+                     accept=".jpg,.jpeg,.png,.gif,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip"
+                     hidden>
+
+              <input type="file" id="folderInput" name="folder_attachments[]" multiple
+                     webkitdirectory directory hidden>
+
+              <button type="button" class="attach-btn" onclick="openFilePicker()">
+                <i class='bx bx-plus'></i>
+              </button>
+
+              <span id="fileCount" class="file-count"></span>
+            </div>
+
+            <button type="submit" name="send_message" class="send-btn">Send</button>
           </form>
         <?php endif; ?>
       </div>
@@ -349,6 +488,7 @@ $border_color = ($msg_type === 'error') ? '#f5c6cb' : '#c3e6cb';
 </section>
 
 <script>
+/* Tabs */
 function openTab(evt, tabName) {
   var tabcontent = document.getElementsByClassName("tab-content");
   for (var i = 0; i < tabcontent.length; i++) tabcontent[i].style.display = "none";
@@ -360,17 +500,40 @@ function openTab(evt, tabName) {
   evt.currentTarget.className += " active";
 }
 
-// Auto-open chat tab if URL contains #chatTab
+/* Plus icon upload */
+function openFilePicker() {
+  document.getElementById('fileInput').click();
+}
+
+// right click for folder picker
+document.addEventListener('contextmenu', function(e) {
+  if (e.target.closest('.attach-btn')) {
+    e.preventDefault();
+    document.getElementById('folderInput').click();
+  }
+});
+
+function updateFileCount() {
+  const files =
+    document.getElementById('fileInput').files.length +
+    document.getElementById('folderInput').files.length;
+
+  document.getElementById('fileCount').textContent =
+    files > 0 ? files + " file(s) selected" : "";
+}
+
+document.getElementById('fileInput').addEventListener('change', updateFileCount);
+document.getElementById('folderInput').addEventListener('change', updateFileCount);
+
+/* auto-open chat tab + scroll bottom */
 window.addEventListener("load", () => {
   if (window.location.hash === "#chatTab") {
     const btns = document.getElementsByClassName("tab-btn");
     if (btns.length >= 2) {
-      // simulate click to open chat tab
       openTab({ currentTarget: btns[1] }, 'chatTab');
       btns[1].className += " active";
     }
   }
-  // scroll chat bottom
   const chat = document.getElementById("chatMessages");
   if (chat) chat.scrollTop = chat.scrollHeight;
 });

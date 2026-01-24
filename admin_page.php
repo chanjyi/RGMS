@@ -154,8 +154,9 @@ $border_color = ($msg_type === 'error') ? '#f5c6cb' : '#c3e6cb';
     <title>Admin Dashboard</title>
 
     <!-- Match reviewer_page includes -->
-    <link rel="stylesheet" href="styling/style.css">
-    <link rel="stylesheet" href="styling/dashboard.css">
+    <link rel="stylesheet" href="/RGMS/RGMS/style.css">
+    <link rel="stylesheet" href="/RGMS/RGMS/dashboard.css">
+
     <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
 </head>
 <body>
@@ -225,17 +226,6 @@ $border_color = ($msg_type === 'error') ? '#f5c6cb' : '#c3e6cb';
                 <div class="header-text-group">
                     <h3>Assign New Proposals</h3>
                     <span><?= (int)$new_proposals ?> proposals waiting to assign</span>
-                </div>
-            </div>
-            <i class='bx bx-chevron-right header-arrow'></i>
-        </a>
-
-        <a href="assign_appeal_case.php" class="header-card">
-            <div class="header-left">
-                <div class="header-icon-box"><i class='bx bx-repost'></i></div>
-                <div class="header-text-group">
-                    <h3>Assign Appeal Cases</h3>
-                    <span><?= (int)$appeals_count ?> appeal cases pending reassignment</span>
                 </div>
             </div>
             <i class='bx bx-chevron-right header-arrow'></i>
