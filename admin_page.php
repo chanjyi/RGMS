@@ -189,9 +189,9 @@ $border_color = ($msg_type === 'error') ? '#f5c6cb' : '#c3e6cb';
 
         <a href="users_list.php" class="header-card">
             <div class="header-left">
-                <div class="header-icon-box"><i class='bx bx-user'></i></div>
+                <div class="header-icon-box"><i class='bx bx-user-pin'></i></div>
                 <div class="header-text-group">
-                    <h3>Manage Users</h3>
+                    <h3>Total Users</h3>
                     <span>View all user accounts</span>
                 </div>
             </div>
@@ -213,7 +213,7 @@ $border_color = ($msg_type === 'error') ? '#f5c6cb' : '#c3e6cb';
             <div class="header-left">
                 <div class="header-icon-box"><i class='bx bx-file'></i></div>
                 <div class="header-text-group">
-                    <h3>Manage Proposals</h3>
+                    <h3>Total Proposals</h3>
                     <span>View proposals list</span>
                 </div>
             </div>
@@ -235,7 +235,7 @@ $border_color = ($msg_type === 'error') ? '#f5c6cb' : '#c3e6cb';
             <div class="header-left">
                 <div class="header-icon-box"><i class='bx bx-money'></i></div>
                 <div class="header-text-group">
-                    <h3>Manage Grants</h3>
+                    <h3>Total Grants</h3>
                     <span>View grants & details</span>
                 </div>
             </div>
