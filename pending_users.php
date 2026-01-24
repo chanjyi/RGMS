@@ -121,6 +121,10 @@ $border_color = ($msg_type === 'error') ? '#f5c6cb' : '#c3e6cb';
 <?php include 'sidebar.php'; ?>
 
 <section class="home-section">
+    <a href="<?= $dashboardLink ?>" class="btn-back" style="display: inline-flex; align-items: center; text-decoration: none; color: #3C5B6F; font-weight: 600; margin-bottom: 15px;">
+            <i class='bx bx-left-arrow-alt' style="font-size: 20px; margin-right: 5px;"></i> 
+            Back to Dashboard
+        </a>
     <div class="welcome-text">
         <i class='bx bx-user-check' style="font-size:24px; vertical-align:middle;"></i>
         Admin Dashboard | User Approvals
@@ -129,10 +133,7 @@ $border_color = ($msg_type === 'error') ? '#f5c6cb' : '#c3e6cb';
 
     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:15px;">
         <!-- Return button (same as your reference pattern) -->
-        <a href="<?= $dashboardLink ?>" class="btn-back" style="display: inline-flex; align-items: center; text-decoration: none; color: #3C5B6F; font-weight: 600; margin-bottom: 15px;">
-            <i class='bx bx-left-arrow-alt' style="font-size: 20px; margin-right: 5px;"></i> 
-            Back to Dashboard
-        </a>
+        
     </div>
 
     <?php if (!empty($message)): ?>

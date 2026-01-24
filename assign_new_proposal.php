@@ -97,6 +97,10 @@ $border_color = ($msg_type === 'error') ? '#f5c6cb' : '#c3e6cb';
 <?php include 'sidebar.php'; ?>
 
 <section class="home-section">
+    <a href="<?= $dashboardLink ?>" class="btn-back" style="display: inline-flex; align-items: center; text-decoration: none; color: #3C5B6F; font-weight: 600; margin-bottom: 15px;">
+            <i class='bx bx-left-arrow-alt' style="font-size: 20px; margin-right: 5px;"></i> 
+            Back to Dashboard
+        </a>
 
     <!-- Header (same style as your Users page) -->
     <div class="welcome-text">
@@ -108,10 +112,7 @@ $border_color = ($msg_type === 'error') ? '#f5c6cb' : '#c3e6cb';
 
     <!-- Return button (same style as Users page) -->
     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:15px;">
-        <a href="<?= $dashboardLink ?>" class="btn-back" style="display: inline-flex; align-items: center; text-decoration: none; color: #3C5B6F; font-weight: 600; margin-bottom: 15px;">
-            <i class='bx bx-left-arrow-alt' style="font-size: 20px; margin-right: 5px;"></i> 
-            Back to Dashboard
-        </a>
+        
     </div>
 
     <!-- Alert -->

@@ -63,6 +63,16 @@ if (isset($_POST['submit_proposal'])) {
             
             if ($stmt->execute()) {
                 $proposal_id = $conn->insert_id;
+
+                log_activity(
+                $conn,
+                "CREATE",
+                "PROPOSAL",
+                (int)$proposal_id,
+                "Submit Proposal",
+                "Researcher submitted proposal: $title"
+            );
+
                 
                 // Insert budget breakdown into budget_items table
                 $categories = [
@@ -136,6 +146,16 @@ if (isset($_POST['delete_proposal'])) {
             if ($delete->execute()) {
                 $message = "Proposal deleted successfully."; 
                 $messageType = "success";
+
+            log_activity(
+            $conn,
+            "DELETE",
+            "PROPOSAL",
+            (int)$prop_id,
+            "Delete Proposal",
+            "Researcher deleted proposal #$prop_id"
+        );
+
             }
         } else {
             $message = "Cannot delete proposal that is already being processed."; 
@@ -214,6 +234,16 @@ if (isset($_POST['amend_proposal'])) {
 
                 $message = "Amendment submitted successfully! The reviewer has been notified."; 
                 $messageType = "success";
+
+                log_activity(
+                $conn,
+                "UPDATE",
+                "PROPOSAL",
+                (int)$prop_id,
+                "Amend Proposal",
+                "Researcher resubmitted amendments (new version: $new_version)"
+            );
+
             }
         } else {
             $message = "Error uploading file.";
@@ -254,6 +284,16 @@ if (isset($_POST['appeal_proposal'])) {
                 
                 $message = "Appeal submitted successfully with your justification. The Head of Department will review your case."; 
                 $messageType = "success";
+
+                log_activity(
+                $conn,
+                "CREATE",
+                "APPEAL_REQUEST",
+                null,
+                "Appeal Proposal",
+                "Researcher appealed proposal #$prop_id"
+            );
+
             } else {
                 $message = "Error submitting appeal: " . $conn->error; 
                 $messageType = "error";
@@ -306,6 +346,16 @@ if (isset($_POST['submit_report'])) {
                     $mile_update = $conn->prepare("UPDATE milestones SET status = 'COMPLETED', completion_date = CURDATE() WHERE id = ? AND grant_id = ?");
                     $mile_update->bind_param("ii", $milestone_id, $grant_id);
                     $mile_update->execute();
+
+                    log_activity(
+                    $conn,
+                    "CREATE",
+                    "PROGRESS_REPORT",
+                    null,
+                    "Submit Progress Report",
+                    "Researcher submitted progress report for grant #$grant_id: $rep_title"
+                );
+
                 }
                 
                 // Forward to HOD for monitoring
@@ -341,6 +391,16 @@ if (isset($_POST['request_extension'])) {
             notifySystem($conn, 'hod', "Deadline Extension Request: $email requests extension for Report #$report_id to $new_date. Reason: $reason");
             $message = "Extension request submitted to Head of Department for approval."; 
             $messageType = "success";
+
+            log_activity(
+            $conn,
+            "CREATE",
+            "EXTENSION_REQUEST",
+            null,
+            "Request Extension",
+            "Researcher requested extension for report #$report_id to $new_date"
+        );
+
         } else {
             $message = "Error submitting extension request."; 
             $messageType = "error";
@@ -385,6 +445,16 @@ if (isset($_POST['request_extension'])) {
             // Note: We DO NOT update the budget_items total yet. That happens when HOD approves.
             $message = "Expenditure logged. You can now select it in the Claims section to request reimbursement."; 
             $messageType = "success";
+
+            log_activity(
+            $conn,
+            "CREATE",
+            "EXPENDITURE",
+            null,
+            "Log Expenditure",
+            "Researcher logged expenditure RM/$$amount for budget_item_id=$budget_item_id"
+        );
+
         }
     } else {
         $message = "Error: Amount exceeds remaining budget for this category."; 
@@ -450,6 +520,16 @@ if (isset($_POST['request_reimbursement'])) {
             notifySystem($conn, 'hod', "Reimbursement Request: RM" . number_format($total_claim, 2));
             $message = "Reimbursement request submitted."; 
             $messageType = "success";
+
+            log_activity(
+            $conn,
+            "CREATE",
+            "REIMBURSEMENT_REQUEST",
+            (int)$req_id,
+            "Request Reimbursement",
+            "Researcher requested reimbursement for grant #$grant_id (total: $total_claim)"
+        );
+
         }
     }
 }

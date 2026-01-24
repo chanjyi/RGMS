@@ -44,15 +44,16 @@ $users_q = $conn->query("SELECT * FROM users ORDER BY id DESC");
 <?php include 'sidebar.php'; ?>
 
 <section class="home-section">
+    <a href="<?= $dashboardLink ?>" class="btn-back" style="display: inline-flex; align-items: center; text-decoration: none; color: #3C5B6F; font-weight: 600; margin-bottom: 15px;">
+            <i class='bx bx-left-arrow-alt' style="font-size: 20px; margin-right: 5px;"></i> 
+            Back to Dashboard
+        </a>
     <div class="welcome-text">
         <i class='bx bx-group' style="font-size:24px; vertical-align:middle;"></i>
         Admin Dashboard | Users
     </div>
     <hr style="border: 1px solid #3C5B6F; opacity: 0.3; margin-bottom: 25px;">
-    <a href="<?= $dashboardLink ?>" class="btn-back" style="display: inline-flex; align-items: center; text-decoration: none; color: #3C5B6F; font-weight: 600; margin-bottom: 15px;">
-            <i class='bx bx-left-arrow-alt' style="font-size: 20px; margin-right: 5px;"></i> 
-            Back to Dashboard
-        </a>
+   
 
 
     <!-- Tab Navigation (same pattern) -->
