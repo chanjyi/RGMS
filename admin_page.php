@@ -221,7 +221,7 @@ $border_color = ($msg_type === 'error') ? '#f5c6cb' : '#c3e6cb';
             <div class="header-left">
                 <div class="header-icon-box"><i class='bx bx-task'></i></div>
                 <div class="header-text-group">
-                    <h3>Assign New Proposals</h3>
+                    <h3>Assign Proposals</h3>
                     <span><?= (int)$new_proposals ?> proposals waiting to assign</span>
                 </div>
             </div>
