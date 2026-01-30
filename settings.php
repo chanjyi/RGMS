@@ -172,7 +172,7 @@ $email_on   = $user_data['notify_email'] ?? 1;
 <head>
     <meta charset="UTF-8">
     <title>Settings | RGMS</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="styling/style.css">
     <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
 </head>
 <body>
@@ -181,7 +181,7 @@ $email_on   = $user_data['notify_email'] ?? 1;
 
     <section class="home-section">
         <div class="welcome-text">Settings</div>
-        <hr style="opacity: 0.3; margin: 20px 0;">
+        <hr style="border: 1px solid #3C5B6F; opacity: 0.3; margin: 20px 0;">
         
         <div class="form-box" style="max-width: 800px; margin: 0 auto;">
 
