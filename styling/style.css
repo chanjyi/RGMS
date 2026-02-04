@@ -1031,6 +1031,27 @@ textarea {
     animation: fadeIn 0.5s ease forwards;
 }
 
+/* admin page button */
+.btn-return{
+  background: #3C5B6F;
+  color: white;
+  border: none;
+  padding: 10px 18px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: 0.2s;
+}
+
+.btn-return:hover{
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+
 /* Animations */
 @keyframes slideDown {
     from {
@@ -1122,4 +1143,45 @@ textarea {
 .sidebar li.profile .links_name {
     color: #3C5B6F !important;
     font-weight: 700;
+}
+
+/* ===========================
+   REVIEW PROPOSAL SPECIFIC STYLES
+   =========================== */
+.detail-box { 
+    background: #f8f9fa; 
+    padding: 20px; 
+    border-radius: 8px; 
+    border: 1px solid #e9ecef; 
+    margin-bottom: 25px; 
+}
+
+.budget-table { 
+    width: 100%; 
+    border-collapse: collapse; 
+    margin-top: 5px; 
+    font-size: 13px; 
+}
+.budget-table td { 
+    padding: 5px; 
+    border-bottom: 1px solid #eee; 
+}
+.budget-table tr:last-child td { 
+    border-bottom: none; 
+}
+
+.version-table { 
+    width: 100%; 
+    font-size: 13px; 
+    border-collapse: collapse; 
+    margin-top: 10px; 
+}
+.version-table th { 
+    background: #e9ecef; 
+    padding: 8px; 
+    text-align: left; 
+}
+.version-table td { 
+    padding: 8px; 
+    border-bottom: 1px solid #ddd; 
 }

@@ -1,6 +1,7 @@
 <?php
 session_start();
 require 'config.php';
+require 'activity_helper.php';
 
 // Verify HOD access
 if (!isset($_SESSION['email']) || $_SESSION['role'] != 'hod') {
@@ -50,6 +51,17 @@ $row = $detail_stmt->get_result()->fetch_assoc();
 
 if (!$row) {
     die('Appeal not found');
+
+    // ✅ LOG: HOD viewed appeal details (runs only when row exists)
+    log_activity(
+        $conn,
+        "VIEW",
+        "APPEAL_REQUEST",
+        (int)$appeal_id,
+        "View Appeal Details",
+        "HOD viewed appeal #$appeal_id for proposal #$proposal_id ({$row['title']})"
+    );
+
 }
 
 // Fetch all reviewer feedback

@@ -1,6 +1,8 @@
 <?php
 session_start();
 require 'config.php';
+require 'activity_helper.php';
+
 
 // Security Check
 if (!isset($_SESSION['email']) || $_SESSION['role'] != 'researcher') {
@@ -12,9 +14,10 @@ $message = "";
 $messageType = ""; 
 $email = $_SESSION['email'];
 
-// Helper: Notify System
+// Helper: Notify System (Only sends if notify_system is ON)
 function notifySystem($conn, $role, $msg) {
-    $q = $conn->prepare("SELECT email FROM users WHERE role = ?");
+    // Added 'AND notify_system = 1' to the query
+    $q = $conn->prepare("SELECT email FROM users WHERE role = ? AND notify_system = 1");
     $q->bind_param("s", $role);
     $q->execute();
     $result = $q->get_result();
@@ -61,6 +64,16 @@ if (isset($_POST['submit_proposal'])) {
             
             if ($stmt->execute()) {
                 $proposal_id = $conn->insert_id;
+
+                log_activity(
+                $conn,
+                "CREATE",
+                "PROPOSAL",
+                (int)$proposal_id,
+                "Submit Proposal",
+                "Researcher submitted proposal: $title"
+            );
+
                 
                 // Insert budget breakdown into budget_items table
                 $categories = [
@@ -134,6 +147,16 @@ if (isset($_POST['delete_proposal'])) {
             if ($delete->execute()) {
                 $message = "Proposal deleted successfully."; 
                 $messageType = "success";
+
+            log_activity(
+            $conn,
+            "DELETE",
+            "PROPOSAL",
+            (int)$prop_id,
+            "Delete Proposal",
+            "Researcher deleted proposal #$prop_id"
+        );
+
             }
         } else {
             $message = "Cannot delete proposal that is already being processed."; 
@@ -212,6 +235,16 @@ if (isset($_POST['amend_proposal'])) {
 
                 $message = "Amendment submitted successfully! The reviewer has been notified."; 
                 $messageType = "success";
+
+                log_activity(
+                $conn,
+                "UPDATE",
+                "PROPOSAL",
+                (int)$prop_id,
+                "Amend Proposal",
+                "Researcher resubmitted amendments (new version: $new_version)"
+            );
+
             }
         } else {
             $message = "Error uploading file.";
@@ -252,6 +285,16 @@ if (isset($_POST['appeal_proposal'])) {
                 
                 $message = "Appeal submitted successfully with your justification. The Head of Department will review your case."; 
                 $messageType = "success";
+
+                log_activity(
+                $conn,
+                "CREATE",
+                "APPEAL_REQUEST",
+                null,
+                "Appeal Proposal",
+                "Researcher appealed proposal #$prop_id"
+            );
+
             } else {
                 $message = "Error submitting appeal: " . $conn->error; 
                 $messageType = "error";
@@ -304,6 +347,16 @@ if (isset($_POST['submit_report'])) {
                     $mile_update = $conn->prepare("UPDATE milestones SET status = 'COMPLETED', completion_date = CURDATE() WHERE id = ? AND grant_id = ?");
                     $mile_update->bind_param("ii", $milestone_id, $grant_id);
                     $mile_update->execute();
+
+                    log_activity(
+                    $conn,
+                    "CREATE",
+                    "PROGRESS_REPORT",
+                    null,
+                    "Submit Progress Report",
+                    "Researcher submitted progress report for grant #$grant_id: $rep_title"
+                );
+
                 }
                 
                 // Forward to HOD for monitoring
@@ -339,6 +392,16 @@ if (isset($_POST['request_extension'])) {
             notifySystem($conn, 'hod', "Deadline Extension Request: $email requests extension for Report #$report_id to $new_date. Reason: $reason");
             $message = "Extension request submitted to Head of Department for approval."; 
             $messageType = "success";
+
+            log_activity(
+            $conn,
+            "CREATE",
+            "EXTENSION_REQUEST",
+            null,
+            "Request Extension",
+            "Researcher requested extension for report #$report_id to $new_date"
+        );
+
         } else {
             $message = "Error submitting extension request."; 
             $messageType = "error";
@@ -383,6 +446,16 @@ if (isset($_POST['request_extension'])) {
             // Note: We DO NOT update the budget_items total yet. That happens when HOD approves.
             $message = "Expenditure logged. You can now select it in the Claims section to request reimbursement."; 
             $messageType = "success";
+
+            log_activity(
+            $conn,
+            "CREATE",
+            "EXPENDITURE",
+            null,
+            "Log Expenditure",
+            "Researcher logged expenditure RM/$$amount for budget_item_id=$budget_item_id"
+        );
+
         }
     } else {
         $message = "Error: Amount exceeds remaining budget for this category."; 
@@ -395,7 +468,7 @@ if (isset($_POST['request_extension'])) {
 // =========================================================
 
 // Fetch all proposals with review details
-$sql_props = "SELECT p.*, r.decision as reviewer_decision, r.feedback 
+$sql_props = "SELECT p.*, r.decision as reviewer_decision, r.feedback, r.annotated_file 
               FROM proposals p 
               LEFT JOIN reviews r ON p.id = r.proposal_id 
               WHERE p.researcher_email = ? 
@@ -448,6 +521,16 @@ if (isset($_POST['request_reimbursement'])) {
             notifySystem($conn, 'hod', "Reimbursement Request: RM" . number_format($total_claim, 2));
             $message = "Reimbursement request submitted."; 
             $messageType = "success";
+
+            log_activity(
+            $conn,
+            "CREATE",
+            "REIMBURSEMENT_REQUEST",
+            (int)$req_id,
+            "Request Reimbursement",
+            "Researcher requested reimbursement for grant #$grant_id (total: $total_claim)"
+        );
+
         }
     }
 }
@@ -682,10 +765,19 @@ if (isset($_POST['request_reimbursement'])) {
                             <td>$<?= number_format($row['budget_requested'], 2) ?></td>
                             <td style="font-size:12px; color:#555; max-width:200px;">
                                 <?php if(!empty($row['feedback'])): ?>
-                                    <?= htmlspecialchars(substr($row['feedback'], 0, 100)) ?>
-                                    <?= strlen($row['feedback']) > 100 ? '...' : '' ?>
+                                    <div style="margin-bottom: 5px;">
+                                        <?= htmlspecialchars(substr($row['feedback'], 0, 100)) ?>
+                                        <?= strlen($row['feedback']) > 100 ? '...' : '' ?>
+                                    </div>
                                 <?php else: ?>
-                                    <em style="color:#999;">No feedback yet</em>
+                                    <em style="color:#999;">No written feedback</em><br>
+                                <?php endif; ?>
+
+                                <?php if (!empty($row['annotated_file'])): ?>
+                                    <a href="<?= htmlspecialchars($row['annotated_file']) ?>" target="_blank" 
+                                    style="display: inline-flex; align-items: center; gap: 3px; color: #3C5B6F; font-weight: 600; text-decoration: none; margin-top: 5px; background: #eef4f8; padding: 3px 8px; border-radius: 4px;">
+                                        <i class='bx bx-download'></i> Annotated PDF
+                                    </a>
                                 <?php endif; ?>
                             </td>
                             <td style="font-size:12px;"><?= date('M d, Y', strtotime($row['created_at'])) ?></td>

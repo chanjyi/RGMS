@@ -1,6 +1,7 @@
 <?php
 session_start();
 require 'config.php';
+require 'activity_helper.php';
 
 // Verify HOD access
 if (!isset($_SESSION['email']) || $_SESSION['role'] != 'hod') {
@@ -60,6 +61,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['appeal_action'])) {
 
                     $conn->commit();
                     $banner = ['type' => 'success', 'text' => 'Appeal approved and sent to admin for reassignment.'];
+
+                    log_activity(
+                        $conn,
+                        "APPROVE_APPEAL",                // action
+                        "APPEAL_REQUEST",                // entity_type
+                        (int)$appeal_id,                 // entity_id (int)
+                        "Approve Appeal",                // label
+                        "Approved appeal #$appeal_id for proposal #$proposal_id ({$info['title']}); proposal set to PENDING_REASSIGNMENT and priority=High"
+                    );
+
+
+
                 } elseif ($action === 'reject') {
                     // Uphold rejection
                     $upd_prop = $conn->prepare("UPDATE proposals SET status = 'APPEAL_REJECTED' WHERE id = ?");
@@ -84,6 +97,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['appeal_action'])) {
 
                     $conn->commit();
                     $banner = ['type' => 'error', 'text' => 'Appeal dismissed. Researcher notified.'];
+
+                    log_activity(
+                        $conn,
+                        "REJECT_APPEAL",                 // action
+                        "APPEAL_REQUEST",                // entity_type
+                        (int)$appeal_id,                 // entity_id (int)
+                        "Reject Appeal",                 // label
+                        "Rejected appeal #$appeal_id for proposal #$proposal_id ({$info['title']}); proposal set to APPEAL_REJECTED"
+                    );
+
+
+
                 }
             } catch (Exception $e) {
                 $conn->rollback();
