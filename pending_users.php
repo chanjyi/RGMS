@@ -1,6 +1,7 @@
 <?php
 session_start();
 require 'config.php';
+require 'activity_helper.php';
 
 /* Security Check */
 if (!isset($_SESSION['email']) || ($_SESSION['role'] ?? '') !== 'admin') {
@@ -20,6 +21,17 @@ if (isset($_POST['action'], $_POST['user_id'])) {
         $msg_type = "error";
         $message = "Invalid user id.";
     } else {
+        // Fetch target user info for logging
+        $target_email = '';
+        $target_role  = '';
+
+        $infoStmt = $conn->prepare("SELECT email, role FROM users WHERE id = ?");
+        $infoStmt->bind_param("i", $user_id);
+        $infoStmt->execute();
+        $infoStmt->bind_result($target_email, $target_role);
+        $infoStmt->fetch();
+        $infoStmt->close();
+
         if ($action === 'approve') {
             $stmt = $conn->prepare("UPDATE users SET status = 'APPROVED' WHERE id = ?");
             $stmt->bind_param("i", $user_id);
@@ -27,6 +39,18 @@ if (isset($_POST['action'], $_POST['user_id'])) {
             if ($stmt->execute()) {
                 $msg_type = "success";
                 $message = "User approved successfully.";
+
+               log_activity(
+                $conn,
+                "APPROVE_ACCOUNT",
+                "USER",
+                (int)$user_id,
+                "Approve Account",
+                "Admin approved user #$user_id ($target_email) role=$target_role"
+            );
+
+
+
             } else {
                 $msg_type = "error";
                 $message = "Database error: " . $stmt->error;
@@ -40,6 +64,17 @@ if (isset($_POST['action'], $_POST['user_id'])) {
             if ($stmt->execute()) {
                 $msg_type = "success";
                 $message = "User rejected successfully.";
+
+                log_activity(
+                $conn,
+                "REJECT_ACCOUNT",
+                "USER",
+                (int)$user_id,
+                "Reject Account",
+                "Admin rejected user #$user_id ($target_email) role=$target_role"
+            );
+
+
             } else {
                 $msg_type = "error";
                 $message = "Database error: " . $stmt->error;

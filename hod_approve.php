@@ -1,6 +1,7 @@
 <?php
 session_start();
 require 'config.php';
+require 'activity_helper.php';
 
 if (!isset($_SESSION['email']) || $_SESSION['role'] != 'hod') {
     header('Location: index.php');
@@ -36,6 +37,16 @@ if (isset($_POST['final_decision'])) {
             $msg = "Appeal Update: The HOD has accepted your appeal. Your proposal will be reassigned to a new reviewer.";
             $conn->query("INSERT INTO notifications (user_email, message) VALUES ('{$data['researcher_email']}', '$msg')");
             
+           log_activity(
+            $conn,
+            "GRANT_APPEAL",
+            "PROPOSAL",
+            (int)$prop_id,
+            "Grant Appeal",
+            "HOD accepted appeal for proposal #$prop_id ({$data['title']}) and set status=PENDING_REASSIGNMENT"
+        );
+
+
             header("Location: hod_page.php");
             exit();
         }
@@ -56,6 +67,16 @@ if (isset($_POST['final_decision'])) {
             $rev_stmt->bind_param("i", $prop_id);
             $rev_stmt->execute();
             $reviewer = $rev_stmt->get_result()->fetch_assoc();
+
+            log_activity(
+                $conn,
+                "FINAL_DECISION",
+                "PROPOSAL",
+                (int)$prop_id,
+                "Final Decision",
+                "HOD set final decision=$decision for proposal #$prop_id ({$data['title']})"
+            );
+
 
             if ($reviewer) {
                 $rev_msg = "";
