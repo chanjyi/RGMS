@@ -1,6 +1,12 @@
 <?php
 session_start();
 require 'config.php';
+require 'activity_helper.php';
+
+$admin_id   = (int)($_SESSION['user_id'] ?? 0);
+$admin_role = (string)($_SESSION['role'] ?? 'admin');
+$admin_email = (string)($_SESSION['email'] ?? '');
+
 
 /* Admin protection */
 if (!isset($_SESSION['email']) || ($_SESSION['role'] ?? '') !== 'admin') {
@@ -36,6 +42,17 @@ if (isset($_POST['report_action'], $_POST['report_id'])) {
             $up->execute();
             $up->close();
 
+            log_activity(
+            $conn,
+            "MARK_REPORT_RESOLVED",      // action
+            "MISCONDUCT_REPORT",         // entity_type
+            (int)$report_id,             // entity_id (INT!)
+            "Mark Report Resolved",      // label
+            "Admin ({$_SESSION['email']}) marked report #{$report_id} as resolved"
+        );
+
+
+
             $msg_type = "success";
             $message = "Report marked as resolved.";
 
@@ -49,6 +66,17 @@ if (isset($_POST['report_action'], $_POST['report_id'])) {
             $up->bind_param("i", $report_id);
             $up->execute();
             $up->close();
+
+            log_activity(
+            $conn,
+            "REMOVE_USER",
+            "USER",
+            null,
+            "Remove User",
+            "Admin removed user {$target_email} due to misconduct report #{$report_id}"
+        );
+
+
 
             $msg_type = "success";
             $message = "User removed and action recorded.";
@@ -64,6 +92,17 @@ if (isset($_POST['report_action'], $_POST['report_id'])) {
             $up->bind_param("i", $report_id);
             $up->execute();
             $up->close();
+
+            log_activity(
+            $conn,
+            "WARN_USER",
+            "MISCONDUCT_REPORT",
+            (int)$report_id,
+            "Warn User",
+            "Admin warned {$target_email} for report #{$report_id}"
+        );
+
+
 
             $msg_type = "success";
             $message = "Warning sent to user.";

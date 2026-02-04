@@ -1,6 +1,7 @@
 <?php
 session_start();
 require 'config.php';
+require 'activity_helper.php';
 
 if (!isset($_SESSION['email']) || $_SESSION['role'] != 'reviewer') {
     header('Location: index.php');
@@ -8,6 +9,17 @@ if (!isset($_SESSION['email']) || $_SESSION['role'] != 'reviewer') {
 }
 
 $email = $_SESSION['email'];
+
+// ✅ LOG HERE (once per page load)
+log_activity(
+    $conn,
+    "VIEW_MISCONDUCT_CASES",
+    "MISCONDUCT_REPORT",
+    null,
+    "View Misconduct Cases",
+    "Reviewer viewed misconduct cases list"
+);
+
 
 // Fetch Reports
 $rep_query = "SELECT m.created_at as review_date, p.title, p.researcher_email, m.category, m.details
