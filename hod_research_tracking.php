@@ -139,15 +139,52 @@ if (isset($_POST['reimbursement_decision'])) {
     }
 }
 
-// 4. MARK RESEARCH AS ARCHIVED
+// 4. MARK RESEARCH AS COMPLETED
+if (isset($_POST['mark_complete'])) {
+    $proposal_id = intval($_POST['proposal_id']);
+    
+    // Check eligibility: all milestones completed AND latest report approved
+    $check_sql = "SELECT 
+        COUNT(DISTINCT m.id) as total_milestones,
+        COUNT(DISTINCT CASE WHEN UPPER(TRIM(m.status)) = 'COMPLETED' THEN m.id END) as completed_milestones,
+        (SELECT status FROM progress_reports WHERE proposal_id = ? ORDER BY submitted_at DESC LIMIT 1) as latest_report_status
+    FROM proposals p
+    LEFT JOIN milestones m ON p.id = m.grant_id
+    WHERE p.id = ?";
+    
+    $check_stmt = $conn->prepare($check_sql);
+    $check_stmt->bind_param("ii", $proposal_id, $proposal_id);
+    $check_stmt->execute();
+    $eligibility = $check_stmt->get_result()->fetch_assoc();
+    
+    $all_complete = ($eligibility['total_milestones'] > 0 && $eligibility['completed_milestones'] == $eligibility['total_milestones']);
+    $report_approved = ($eligibility['latest_report_status'] === 'APPROVED');
+    
+    if ($all_complete && $report_approved) {
+        $stmt = $conn->prepare("UPDATE proposals SET health_status = 'COMPLETED' WHERE id = ?");
+        $stmt->bind_param("i", $proposal_id);
+        
+        if ($stmt->execute()) {
+            $banner = ['type' => 'success', 'text' => 'Research project marked as completed and archived.'];
+        } else {
+            $banner = ['type' => 'error', 'text' => 'Failed to mark project as completed.'];
+        }
+    } else {
+        $banner = ['type' => 'error', 'text' => 'Project not eligible for completion. All milestones must be completed and latest report must be approved.'];
+    }
+}
+
+// 5. MARK RESEARCH AS ARCHIVED
 if (isset($_POST['archive_research'])) {
     $proposal_id = intval($_POST['proposal_id']);
     
-    $stmt = $conn->prepare("UPDATE proposals SET status = 'ARCHIVED' WHERE id = ?");
+    $stmt = $conn->prepare("UPDATE proposals SET health_status = 'ARCHIVED' WHERE id = ?");
     $stmt->bind_param("i", $proposal_id);
     
     if ($stmt->execute()) {
-        $banner = ['type' => 'success', 'text' => 'Research project archived successfully.'];
+        $banner = ['type' => 'success', 'text' => 'Research project archived.'];
+    } else {
+        $banner = ['type' => 'error', 'text' => 'Failed to archive project.'];
     }
 }
 
@@ -187,24 +224,27 @@ $active_research_sql = "
 ";;
 $active_research = $conn->query($active_research_sql);
 
-// Completed/Archived Research Projects (mapped to available statuses)
+// Completed/Archived Research Projects (health_status = COMPLETED)
 $completed_research_sql = "
     SELECT 
         p.id,
         p.title,
         p.researcher_email,
         p.status,
+        p.health_status,
         p.approved_at,
         p.approved_budget,
         p.amount_spent,
         u.name AS researcher_name,
         COUNT(DISTINCT pr.id) AS report_count,
+        COUNT(DISTINCT m.id) AS total_milestones,
+        COUNT(DISTINCT CASE WHEN UPPER(TRIM(m.status)) = 'COMPLETED' THEN m.id END) AS completed_milestones,
         (p.approved_budget - p.amount_spent) AS remaining_budget
     FROM proposals p
     LEFT JOIN users u ON p.researcher_email = u.email
     LEFT JOIN progress_reports pr ON p.id = pr.proposal_id
-    -- Map completed/archived concept to available enums: use APPROVED (finished/active) and REJECTED/APPEAL_REJECTED as archived bucket
-    WHERE UPPER(TRIM(p.status)) IN ('APPROVED', 'REJECTED', 'APPEAL_REJECTED')
+    LEFT JOIN milestones m ON p.id = m.grant_id
+    WHERE p.health_status = 'COMPLETED'
     GROUP BY p.id
     ORDER BY p.approved_at DESC
 ";
@@ -914,6 +954,47 @@ $pending_reimbursements = $conn->query($pending_reimbursements_sql);
         </div>
     </div>
 
+    <!-- Reimbursement Details Modal -->
+    <div id="reimbursementDetailModal" class="modal">
+        <div class="modal-content" style="max-width: 900px; width: 92%; height: 85vh; padding: 0; overflow: hidden;">
+            <div class="modal-header" style="padding: 16px 20px; border-bottom: 1px solid #eee;">
+                <h2>Reimbursement Details</h2>
+                <span class="modal-close" onclick="document.getElementById('reimbursementDetailModal').classList.remove('show')">&times;</span>
+            </div>
+            <iframe id="reimbursementDetailFrame" src="" style="width: 100%; height: calc(85vh - 60px); border: none;"></iframe>
+        </div>
+    </div>
+
+    <!-- Completed Research Modal -->
+    <div id="completedResearchModal" class="modal">
+        <div class="modal-content" style="max-width: 1100px; width: 92%; height: 85vh; padding: 0; overflow: hidden;">
+            <div class="modal-header" style="padding: 16px 20px; border-bottom: 1px solid #eee;">
+                <h2>Completed Research Details</h2>
+                <span class="modal-close" onclick="document.getElementById('completedResearchModal').classList.remove('show')">&times;</span>
+            </div>
+            <iframe id="completedResearchFrame" src="" style="width: 100%; height: calc(85vh - 60px); border: none;"></iframe>
+        </div>
+    </div>
+
+    <!-- Navigate Warning Modal -->
+    <div id="navigateWarningModal" class="modal" onclick="if(event.target===this) closeNavigateModal()">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 style="margin: 0;">Leave This Page?</h3>
+                <span class="modal-close" onclick="closeNavigateModal()">&times;</span>
+            </div>
+            <div style="background: #fff8e1; border: 1px solid #ffe0b2; color: #8a5a00; padding: 10px 12px; border-radius: 6px; font-size: 13px; margin: 10px 0 14px;">
+                You are about to navigate to a different tab. Current modal will be closed.
+            </div>
+            <div style="text-align: right;">
+                <button type="button" onclick="closeNavigateModal()" style="padding: 10px 16px; border: 1px solid #ddd; background: #fff; border-radius: 5px; cursor: pointer; margin-right: 10px;">Cancel</button>
+                <button type="button" onclick="proceedNavigate()" style="padding: 10px 18px; border: none; background: #f1c40f; color: #4b3d00; border-radius: 5px; cursor: pointer; font-weight: 600;">
+                    Continue
+                </button>
+            </div>
+        </div>
+    </div>
+
     <div id="reimbursementDecisionModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
@@ -1003,11 +1084,38 @@ $pending_reimbursements = $conn->query($pending_reimbursements_sql);
         // Reimbursement Decision
         function approveReimbursement(requestId) {
             if (!confirm('Are you sure you want to APPROVE this reimbursement and release funds?')) return;
-            document.getElementById('reimbursement_decision_id').value = requestId;
-            document.getElementById('reimbursement_decision').value = 'APPROVED';
-            document.getElementById('reimbursementDecisionTitle').textContent = 'Approve Reimbursement';
-            document.getElementById('reimbursementSubmitBtn').style.background = '#27ae60';
-            document.getElementById('reimbursementDecisionModal').classList.add('show');
+            
+            // Create and submit form directly without modal
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = '';
+            
+            const requestIdInput = document.createElement('input');
+            requestIdInput.type = 'hidden';
+            requestIdInput.name = 'request_id';
+            requestIdInput.value = requestId;
+            form.appendChild(requestIdInput);
+            
+            const decisionInput = document.createElement('input');
+            decisionInput.type = 'hidden';
+            decisionInput.name = 'decision';
+            decisionInput.value = 'APPROVED';
+            form.appendChild(decisionInput);
+            
+            const submitInput = document.createElement('input');
+            submitInput.type = 'hidden';
+            submitInput.name = 'reimbursement_decision';
+            submitInput.value = '1';
+            form.appendChild(submitInput);
+            
+            const remarksInput = document.createElement('input');
+            remarksInput.type = 'hidden';
+            remarksInput.name = 'hod_remarks';
+            remarksInput.value = '';
+            form.appendChild(remarksInput);
+            
+            document.body.appendChild(form);
+            form.submit();
         }
 
         function rejectReimbursement(requestId) {
@@ -1043,11 +1151,44 @@ $pending_reimbursements = $conn->query($pending_reimbursements_sql);
         }
 
         function viewReimbursementDetails(requestId) {
-            window.open('view_reimbursement_details.php?id=' + requestId, '_blank');
+            const modal = document.getElementById('reimbursementDetailModal');
+            const frame = document.getElementById('reimbursementDetailFrame');
+            if (!modal || !frame) return;
+            frame.src = 'view_reimbursement_details.php?id=' + requestId;
+            modal.classList.add('show');
         }
 
         function viewCompletedResearch(proposalId) {
-            window.open('view_completed_research.php?id=' + proposalId, '_blank');
+            const modal = document.getElementById('completedResearchModal');
+            const frame = document.getElementById('completedResearchFrame');
+            if (!modal || !frame) return;
+            frame.src = 'view_completed_research.php?id=' + proposalId;
+            modal.classList.add('show');
+        }
+
+        let navigateTarget = '';
+        function confirmNavigate(tabName) {
+            navigateTarget = tabName;
+            const researchModal = document.getElementById('researchDetailModal');
+            if (researchModal && researchModal.classList.contains('show')) {
+                document.getElementById('navigateWarningModal').classList.add('show');
+            } else {
+                openTab({ currentTarget: document.querySelector(`[data-tab="${tabName}"]`) }, tabName);
+            }
+        }
+        function closeNavigateModal() {
+            document.getElementById('navigateWarningModal').classList.remove('show');
+            navigateTarget = '';
+        }
+        function proceedNavigate() {
+            document.getElementById('navigateWarningModal').classList.remove('show');
+            document.getElementById('researchDetailModal').classList.remove('show');
+            if (navigateTarget) {
+                const tabBtn = document.querySelector(`[data-tab="${navigateTarget}"]`);
+                if (tabBtn) {
+                    openTab({ currentTarget: tabBtn }, navigateTarget);
+                }
+            }
         }
 
         function archiveResearch(proposalId) {

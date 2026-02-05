@@ -50,7 +50,7 @@ if (isset($_POST['review_report'])) {
     $stmt->bind_param("sssi", $decision, $remarks, $hod_email, $report_id);
 
     if ($stmt->execute()) {
-        $report_query = $conn->prepare("SELECT pr.*, p.title AS proposal_title FROM progress_reports pr JOIN proposals p ON pr.proposal_id = p.id WHERE pr.id = ?");
+        $report_query = $conn->prepare("SELECT pr.*, p.title AS proposal_title, p.id as proposal_id FROM progress_reports pr JOIN proposals p ON pr.proposal_id = p.id WHERE pr.id = ?");
         $report_query->bind_param("i", $report_id);
         $report_query->execute();
         $report_data = $report_query->get_result()->fetch_assoc();
@@ -65,6 +65,28 @@ if (isset($_POST['review_report'])) {
         $type = $decision === 'APPROVED' ? 'success' : 'warning';
         $notif->bind_param("sss", $report_data['researcher_email'], $msg, $type);
         $notif->execute();
+
+        // Check if project is eligible for completion
+        $show_completion_popup = false;
+        if ($decision === 'APPROVED') {
+            $check_sql = "SELECT 
+                COUNT(DISTINCT m.id) as total_milestones,
+                COUNT(DISTINCT CASE WHEN UPPER(TRIM(m.status)) = 'COMPLETED' THEN m.id END) as completed_milestones,
+                (SELECT status FROM progress_reports WHERE proposal_id = ? ORDER BY submitted_at DESC LIMIT 1) as latest_report_status
+            FROM milestones m WHERE m.grant_id = ?";
+            
+            $check_stmt = $conn->prepare($check_sql);
+            $check_stmt->bind_param("ii", $report_data['proposal_id'], $report_data['proposal_id']);
+            $check_stmt->execute();
+            $eligibility = $check_stmt->get_result()->fetch_assoc();
+            
+            // Show popup if all milestones complete and latest report is approved
+            if ($eligibility['total_milestones'] > 0 && 
+                $eligibility['completed_milestones'] == $eligibility['total_milestones'] &&
+                $eligibility['latest_report_status'] === 'APPROVED') {
+                $show_completion_popup = true;
+            }
+        }
 
         $banner = ['type' => 'success', 'text' => "Progress report $status_text. Researcher notified."];
     } else {
@@ -183,7 +205,33 @@ $stmt->bind_param("i", $proposal_id);
 $stmt->execute();
 $budget_items = $stmt->get_result();
 
+// Fetch pending reimbursements for this proposal
+$reimbursements_sql = "SELECT COUNT(*) as count FROM reimbursement_requests WHERE grant_id = ? AND status = 'PENDING'";
+$stmt = $conn->prepare($reimbursements_sql);
+$stmt->bind_param("i", $proposal_id);
+$stmt->execute();
+$pending_reimbursements = $stmt->get_result()->fetch_assoc()['count'];
+
 $approved_date = $proposal['approved_at'] ?: $proposal['created_at'];
+
+// Check eligibility for marking as complete
+$can_mark_complete = false;
+$check_sql = "SELECT 
+    COUNT(DISTINCT m.id) as total_milestones,
+    COUNT(DISTINCT CASE WHEN UPPER(TRIM(m.status)) = 'COMPLETED' THEN m.id END) as completed_milestones,
+    (SELECT status FROM progress_reports WHERE proposal_id = ? ORDER BY submitted_at DESC LIMIT 1) as latest_report_status
+FROM milestones m WHERE m.grant_id = ?";
+
+$check_stmt = $conn->prepare($check_sql);
+$check_stmt->bind_param("ii", $proposal_id, $proposal_id);
+$check_stmt->execute();
+$eligibility = $check_stmt->get_result()->fetch_assoc();
+
+if ($eligibility['total_milestones'] > 0 && 
+    $eligibility['completed_milestones'] == $eligibility['total_milestones'] &&
+    $eligibility['latest_report_status'] === 'APPROVED') {
+    $can_mark_complete = true;
+}
 ?>
 
 <!DOCTYPE html>
@@ -251,7 +299,7 @@ $approved_date = $proposal['approved_at'] ?: $proposal['created_at'];
         .btn-action.approve { background: #27ae60; }
         .btn-action.approve:hover { background: #229954; }
         .btn-action.flag { background: #f39c12; }
-        .btn-action.flag:hover { background: #e67e22; }
+        .btn-action.flag:hover { background: #e67e\n        .health-option.completed { color: #27ae60; }\n        .health-option.completed.selected { background: #e8f5e9; }22; }
         .btn-action.view-report { background: #3498db; }
         .btn-action.view-report:hover { background: #2980b9; }
 .status-badge { padding: 4px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; display: inline-block; }
@@ -306,6 +354,10 @@ $approved_date = $proposal['approved_at'] ?: $proposal['created_at'];
                                 $status_icon = 'bx-error-circle';
                                 $status_color = '#f39c12';
                                 $status_text = 'At Risk';
+                            } elseif ($proposal['health_status'] == 'COMPLETED') {
+                                $status_icon = 'bx-check';
+                                $status_color = '#27ae60';
+                                $status_text = 'Completed';
                             } else {
                                 $status_icon = 'bx-x-circle';
                                 $status_color = '#e74c3c';
@@ -326,6 +378,11 @@ $approved_date = $proposal['approved_at'] ?: $proposal['created_at'];
                         <div class="health-option delayed <?= ($proposal['health_status'] == 'DELAYED') ? 'selected' : '' ?>" onclick="selectHealth('DELAYED')">
                             <i class='bx bx-x-circle'></i> Delayed
                         </div>
+                        <?php if ($can_mark_complete): ?>
+                        <div class="health-option completed <?= ($proposal['health_status'] == 'COMPLETED') ? 'selected' : '' ?>" onclick="selectHealth('COMPLETED')">
+                            <i class='bx bx-check'></i> Completed
+                        </div>
+                        <?php endif; ?>
                     </div>
                 </div>
                 <input type="hidden" name="health_status" id="health_status_input" value="<?= $proposal['health_status'] ?? 'ON_TRACK' ?>">
@@ -368,7 +425,15 @@ $approved_date = $proposal['approved_at'] ?: $proposal['created_at'];
     </div>
 
     <div class="detail-card">
-        <div class="detail-header">Budget Breakdown</div>
+        <div class="detail-header-bar" style="display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 3px solid #3498db;">
+            <div class="detail-header" style="margin: 0; padding: 0; border: none;">Budget Breakdown</div>
+            <?php if ($pending_reimbursements > 0): ?>
+                <span class="extension-link" onclick="confirmLeave('hod_research_tracking.php?tab=pending-reimbursements')" style="cursor: pointer;">
+                    <i class='bx bx-wallet'></i>
+                    <?= $pending_reimbursements ?> Reimbursement Request(s)
+                </span>
+            <?php endif; ?>
+        </div>
         
         <table class="budget-table">
             <thead>
@@ -494,6 +559,30 @@ $approved_date = $proposal['approved_at'] ?: $proposal['created_at'];
         <?php endif; ?>
     </div>
 
+    <!-- Mark Project as Complete Modal -->
+    <div id="completeProjectModal" class="modal" onclick="if(event.target===this) closeCompleteModal()">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 style="margin: 0;">Mark Project as Complete?</h3>
+                <span class="modal-close" onclick="closeCompleteModal()">&times;</span>
+            </div>
+            <div style="background: #e8f5e9; border: 1px solid #c8e6c9; color: #2e7d32; padding: 12px; border-radius: 6px; margin: 15px 0; font-size: 14px;">
+                <strong>✓ Project is eligible for completion!</strong><br>
+                All milestones are completed.
+            </div>
+            <p style="color: #555; margin: 15px 0;">This will move the project to the Completed/Archived section. You can still view and manage it from there.</p>
+            <div style="text-align: right;">
+                <button type="button" onclick="closeCompleteModal()" style="padding: 10px 16px; border: 1px solid #ddd; background: #fff; border-radius: 5px; cursor: pointer; margin-right: 10px;">Not Now</button>
+                <form method="POST" action="" style="display: inline;">
+                    <input type="hidden" name="proposal_id" value="<?= $proposal_id ?>">
+                    <input type="hidden" name="mark_complete" value="1">
+                    <button type="submit" style="padding: 10px 18px; border: none; background: #27ae60; color: white; border-radius: 5px; cursor: pointer; font-weight: 600;">
+                        <i class='bx bx-check'></i> Mark as Complete
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
     
     <div id="leavePageModal" class="modal" onclick="if(event.target===this) closeLeaveModal()">
         <div class="modal-content">
@@ -587,6 +676,14 @@ $approved_date = $proposal['approved_at'] ?: $proposal['created_at'];
             document.getElementById('leavePageModal').classList.remove('show');
             leaveTargetUrl = '';
         }
+        function closeCompleteModal() {
+            document.getElementById('completeProjectModal').classList.remove('show');
+        }
+        <?php if (isset($show_completion_popup) && $show_completion_popup): ?>
+        window.addEventListener('load', function() {
+            document.getElementById('completeProjectModal').classList.add('show');
+        });
+        <?php endif; ?>
         function proceedLeave() {
             document.getElementById('leavePageModal').classList.remove('show');
             if (!leaveTargetUrl) {

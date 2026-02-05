@@ -507,39 +507,30 @@ if (isset($_POST['request_reimbursement'])) {
         $clean_ids = array_map('intval', $expenditure_ids);
         $ids_str = implode(',', $clean_ids);
         $calc = $conn->query("SELECT SUM(amount) as total FROM expenditures WHERE id IN ($ids_str) AND status='PENDING_REIMBURSEMENT'");
-        $calc_result = $calc->fetch_assoc();
-        $total_claim = $calc_result['total'] ?? 0;
+        $total_claim = $calc->fetch_assoc()['total'];
         
-        if ($total_claim <= 0) {
-            $message = "No valid expenditures found to claim.";
-            $messageType = "error";
-        } else {
-            // Create Request
-            $stmt = $conn->prepare("INSERT INTO reimbursement_requests (grant_id, researcher_email, total_amount, justification, status, requested_at) VALUES (?, ?, ?, ?, 'PENDING', NOW())");
-            $stmt->bind_param("isds", $grant_id, $email, $total_claim, $justification);
+        // Create Request
+        $stmt = $conn->prepare("INSERT INTO reimbursement_requests (grant_id, researcher_email, total_amount, justification, status, requested_at) VALUES (?, ?, ?, ?, 'PENDING', NOW())");
+        $stmt->bind_param("isds", $grant_id, $email, $total_claim, $justification);
+        
+        if ($stmt->execute()) {
+            $req_id = $conn->insert_id;
+            // Link expenditures to this request
+            $conn->query("UPDATE expenditures SET reimbursement_request_id = $req_id, status = 'UNDER_REVIEW' WHERE id IN ($ids_str)");
             
-            if ($stmt->execute()) {
-                $req_id = $conn->insert_id;
-                // Link expenditures to this request
-                $conn->query("UPDATE expenditures SET reimbursement_request_id = $req_id, status = 'UNDER_REVIEW' WHERE id IN ($ids_str)");
-                
-                notifySystem($conn, 'hod', "Reimbursement Request: RM" . number_format($total_claim, 2));
-                $message = "Reimbursement request submitted successfully. Total: RM" . number_format($total_claim, 2);
-                $messageType = "success";
+            notifySystem($conn, 'hod', "Reimbursement Request: RM" . number_format($total_claim, 2));
+            $message = "Reimbursement request submitted."; 
+            $messageType = "success";
 
-                log_activity(
-                $conn,
-                "CREATE",
-                "REIMBURSEMENT_REQUEST",
-                (int)$req_id,
-                "Request Reimbursement",
-                "Researcher requested reimbursement for grant #$grant_id (total: RM" . number_format($total_claim, 2) . ")"
-            );
+            log_activity(
+            $conn,
+            "CREATE",
+            "REIMBURSEMENT_REQUEST",
+            (int)$req_id,
+            "Request Reimbursement",
+            "Researcher requested reimbursement for grant #$grant_id (total: $total_claim)"
+        );
 
-            } else {
-                $message = "Failed to submit reimbursement request. Please try again.";
-                $messageType = "error";
-            }
         }
     }
 }
@@ -1235,22 +1226,16 @@ if (isset($_POST['request_reimbursement'])) {
                     <div id="pending_claims_list">
                         <?php
                         // Fetch expenditures that haven't been claimed yet
-                        $q = $conn->query("SELECT e.*, p.id AS proposal_id, p.title, b.category FROM expenditures e JOIN budget_items b ON e.budget_item_id=b.id JOIN proposals p ON b.proposal_id=p.id WHERE p.researcher_email='$email' AND e.status='PENDING_REIMBURSEMENT'");
-                        if ($q && $q->num_rows > 0) {
-                            while($ex = $q->fetch_assoc()):
+                        $q = $conn->query("SELECT e.*, p.title, b.category FROM expenditures e JOIN budget_items b ON e.budget_item_id=b.id JOIN proposals p ON b.proposal_id=p.id WHERE p.researcher_email='$email' AND e.status='PENDING_REIMBURSEMENT'");
+                        while($ex = $q->fetch_assoc()):
                         ?>
                         <div style="padding:10px; border-bottom:1px solid #eee;">
                             <label>
                                 <input type="checkbox" name="expenditure_ids[]" value="<?= $ex['id'] ?>" onclick="document.getElementById('grant_hidden').value='<?= $ex['proposal_id'] ?>'"> 
-                                <strong><?= htmlspecialchars($ex['category']) ?> (RM<?= number_format($ex['amount'], 2) ?>)</strong> - <?= htmlspecialchars($ex['description']) ?>
+                                <strong><?= $ex['category'] ?> ($<?= $ex['amount'] ?>)</strong> - <?= $ex['description'] ?>
                             </label>
                         </div>
-                        <?php 
-                            endwhile;
-                        } else {
-                            echo '<p style="color:#7f8c8d; text-align:center; padding:20px;">No pending expenditures to claim.</p>';
-                        }
-                        ?>
+                        <?php endwhile; ?>
                     </div>
                     <input type="hidden" name="grant_id" id="grant_hidden">
                     <textarea name="reimbursement_justification" placeholder="Reason for claim..." style="width:100%; margin-top:10px;"></textarea>
