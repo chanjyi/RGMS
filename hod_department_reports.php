@@ -20,11 +20,18 @@ $end_date = $_GET['end_date'] ?? '';
 $download_format = $_GET['download'] ?? '';
 
 // Helpers
-function build_where($department_id, $start_date, $end_date, &$types, &$params, $prefix = '') {
+function build_where($department_id, $start_date, $end_date, &$types, &$params, $prefix = '', $with_join = false) {
     $types = 'i';
     $params = [$department_id];
     $p = $prefix;
-    $parts = ["{$p}department_id = ?"];
+    
+    // If using JOIN pattern, filter on user's department_id instead of proposal's department_id
+    if ($with_join) {
+        $parts = ["u.department_id = ?"];
+    } else {
+        $parts = ["{$p}department_id = ?"];
+    }
+    
     if (!empty($start_date)) {
         $parts[] = "DATE(COALESCE({$p}approved_at, {$p}created_at)) >= ?";
         $types .= 's';
@@ -54,17 +61,17 @@ if (!$department_id) {
 
 $types = '';
 $params = [];
-$base_where = build_where($department_id, $start_date, $end_date, $types, $params, '');
+$base_where = build_where($department_id, $start_date, $end_date, $types, $params, '', true);
 $types_p = $types;
 $params_p = $params;
-$base_where_p = build_where($department_id, $start_date, $end_date, $types_p, $params_p, 'p.');
+$base_where_p = build_where($department_id, $start_date, $end_date, $types_p, $params_p, 'p.', true);
 $research_statuses = "('APPROVED','REJECTED','APPEAL_REJECTED','RECOMMENDED','RESUBMITTED','PENDING_REVIEW','ASSIGNED','SUBMITTED','REQUIRES_AMENDMENT')";
 $full_statuses = $research_statuses;
 
 // Status distribution
 $status_res = run_query(
     $conn,
-    "SELECT status, COUNT(*) AS c FROM proposals $base_where AND status IN $full_statuses GROUP BY status",
+    "SELECT p.status, COUNT(*) AS c FROM proposals p JOIN users u ON p.researcher_email = u.email $base_where AND p.status IN $full_statuses GROUP BY p.status",
     $types,
     $params
 );
@@ -80,10 +87,12 @@ $budget_res = run_query(
     $conn,
     "SELECT 
         COUNT(*) AS total_projects,
-        SUM(COALESCE(approved_budget,0)) AS total_approved,
-        SUM(COALESCE(amount_spent,0)) AS total_spent,
-        SUM(COALESCE(budget_requested,0)) AS total_requested
-     FROM proposals $base_where AND status IN $research_statuses",
+        SUM(COALESCE(p.approved_budget,0)) AS total_approved,
+        SUM(COALESCE(p.amount_spent,0)) AS total_spent,
+        SUM(COALESCE(p.budget_requested,0)) AS total_requested
+     FROM proposals p 
+     JOIN users u ON p.researcher_email = u.email
+     $base_where AND p.status IN $research_statuses",
     $types,
     $params
 );
@@ -95,6 +104,7 @@ $cat_res = run_query(
     "SELECT b.category, SUM(b.allocated_amount) AS allocated, SUM(b.spent_amount) AS spent
      FROM budget_items b
      JOIN proposals p ON b.proposal_id = p.id
+     JOIN users u ON p.researcher_email = u.email
      $base_where_p AND p.status IN $research_statuses
      GROUP BY b.category",
     $types_p,
@@ -105,9 +115,11 @@ $categories = $cat_res ? $cat_res->fetch_all(MYSQLI_ASSOC) : [];
 // Monthly trends (projects approved/created)
 $trend_res = run_query(
     $conn,
-    "SELECT DATE_FORMAT(COALESCE(approved_at, created_at), '%Y-%m') AS month, COUNT(*) AS submissions
-     FROM proposals $base_where AND status IN $research_statuses
-     GROUP BY DATE_FORMAT(COALESCE(approved_at, created_at), '%Y-%m')
+    "SELECT DATE_FORMAT(COALESCE(p.approved_at, p.created_at), '%Y-%m') AS month, COUNT(*) AS submissions
+     FROM proposals p
+     JOIN users u ON p.researcher_email = u.email
+     $base_where AND p.status IN $research_statuses
+     GROUP BY DATE_FORMAT(COALESCE(p.approved_at, p.created_at), '%Y-%m')
      ORDER BY month",
     $types,
     $params
@@ -125,6 +137,7 @@ $milestone_res = run_query(
         SUM(CASE WHEN m.status = 'DELAYED' THEN 1 ELSE 0 END) AS delayed_count
      FROM milestones m
      JOIN proposals p ON m.grant_id = p.id
+     JOIN users u ON p.researcher_email = u.email
      $base_where_p AND p.status IN $research_statuses",
     $types_p,
     $params_p
@@ -142,6 +155,7 @@ $exp_res = run_query(
      FROM expenditures e
      JOIN budget_items b ON e.budget_item_id = b.id
      JOIN proposals p ON b.proposal_id = p.id
+     JOIN users u ON p.researcher_email = u.email
      $base_where_p AND p.status IN $research_statuses",
     $types_p,
     $params_p
@@ -150,14 +164,17 @@ $expenditures = $exp_res ? $exp_res->fetch_assoc() : ['total_expenditures'=>0,'t
 
 // Recent activity (projects + reports)
 $activity_sql = "(
-    SELECT 'Project' AS type, title AS name, COALESCE(approved_at, created_at) AS date_val, status
-    FROM proposals $base_where AND status IN $full_statuses
+    SELECT 'Project' AS type, p.title AS name, COALESCE(p.approved_at, p.created_at) AS date_val, p.status
+    FROM proposals p
+    JOIN users u ON p.researcher_email = u.email
+    $base_where AND p.status IN $full_statuses
     ORDER BY date_val DESC
     LIMIT 5
 ) UNION ALL (
     SELECT 'Report' AS type, pr.title AS name, pr.submitted_at AS date_val, pr.status
     FROM progress_reports pr
     JOIN proposals p ON pr.proposal_id = p.id
+    JOIN users u ON p.researcher_email = u.email
     $base_where_p
     ORDER BY pr.submitted_at DESC
     LIMIT 5
@@ -367,68 +384,72 @@ if (!empty($download_format)) {
             </div>
         </div>
 
-        <div class="chart-container">
-            <h3><i class='bx bx-receipt'></i> Expenditure Status</h3>
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 18px; text-align: center;">
-                <div>
-                    <div style="font-size: 30px; font-weight: 700; color: #3C5B6F;">
+        <div class="chart-container" style="margin-bottom: 20px;">
+            <h3 style="margin-bottom: 14px;"><i class='bx bx-receipt'></i> Expenditure Status</h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 16px; text-align: center;">
+                <div style="padding: 12px 0;">
+                    <div style="font-size: 28px; font-weight: 700; color: #3C5B6F; margin-bottom: 4px;">
                         <?= (int)($expenditures['total_expenditures'] ?? 0) ?>
                     </div>
-                    <div style="font-size: 13px; color: #666;">Total Expenditures</div>
+                    <div style="font-size: 12px; color: #666;">Total Expenditures</div>
                 </div>
-                <div>
-                    <div style="font-size: 30px; font-weight: 700; color: #2e7d32;">
+                <div style="padding: 12px 0;">
+                    <div style="font-size: 28px; font-weight: 700; color: #2e7d32; margin-bottom: 4px;">
                         RM<?= number_format((float)($expenditures['approved_amount'] ?? 0), 0) ?>
                     </div>
-                    <div style="font-size: 13px; color: #666;">Approved Claims</div>
+                    <div style="font-size: 12px; color: #666;">Approved Claims</div>
                 </div>
-                <div>
-                    <div style="font-size: 30px; font-weight: 700; color: #f9a825;">
+                <div style="padding: 12px 0;">
+                    <div style="font-size: 28px; font-weight: 700; color: #f9a825; margin-bottom: 4px;">
                         RM<?= number_format((float)($expenditures['pending_amount'] ?? 0), 0) ?>
                     </div>
-                    <div style="font-size: 13px; color: #666;">Pending Claims</div>
+                    <div style="font-size: 12px; color: #666;">Pending Claims</div>
                 </div>
             </div>
         </div>
 
-        <div class="chart-container">
-            <h3><i class='bx bx-category'></i> Budget Utilization by Category</h3>
-            <?php if (!empty($categories)): ?>
-                <?php foreach ($categories as $cat): 
-                    $percentage = ($cat['allocated'] ?? 0) > 0 ? (($cat['spent'] ?? 0) / $cat['allocated']) * 100 : 0;
-                ?>
-                    <div style="margin-bottom: 18px;">
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-                            <strong><?= htmlspecialchars($cat['category']) ?></strong>
-                            <span style="color: #666;">RM<?= number_format((float)$cat['spent'], 2) ?> / RM<?= number_format((float)$cat['allocated'], 2) ?></span>
-                        </div>
-                        <div class="category-bar" style="background: #e9ecef; height: 26px; border-radius: 14px; overflow: hidden;">
-                            <div class="category-fill" style="width: <?= min($percentage, 100) ?>%; height: 100%; background: linear-gradient(90deg, #3C5B6F, #20c997); display: flex; align-items: center; padding: 0 10px; color: #fff; font-weight: 600; font-size: 12px;">
-                                <?= round($percentage, 1) ?>%
+        <div class="chart-container" style="margin-bottom: 20px;">
+            <h3 style="margin-bottom: 14px;"><i class='bx bx-category'></i> Budget Utilization by Category</h3>
+            <div style="max-height: 320px; overflow-y: auto; padding-right: 8px;">
+                <?php if (!empty($categories)): ?>
+                    <?php foreach ($categories as $cat): 
+                        $percentage = ($cat['allocated'] ?? 0) > 0 ? (($cat['spent'] ?? 0) / $cat['allocated']) * 100 : 0;
+                    ?>
+                        <div style="margin-bottom: 14px;">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                                <strong><?= htmlspecialchars($cat['category']) ?></strong>
+                                <span style="color: #666; font-size: 12px;">RM<?= number_format((float)$cat['spent'], 2) ?> / RM<?= number_format((float)$cat['allocated'], 2) ?></span>
+                            </div>
+                            <div class="category-bar" style="background: #e9ecef; height: 22px; border-radius: 12px; overflow: hidden;">
+                                <div class="category-fill" style="width: <?= min($percentage, 100) ?>%; height: 100%; background: linear-gradient(90deg, #3C5B6F, #20c997); display: flex; align-items: center; padding: 0 8px; color: #fff; font-weight: 600; font-size: 11px;">
+                                    <?= round($percentage, 1) ?>%
+                                </div>
                             </div>
                         </div>
-                    </div>
-                <?php endforeach; ?>
-            <?php else: ?>
-                <div class="empty-message">No budget data available for the selected range.</div>
-            <?php endif; ?>
+                    <?php endforeach; ?>
+                <?php else: ?>
+                    <div class="empty-message">No budget data available for the selected range.</div>
+                <?php endif; ?>
+            </div>
         </div>
 
-        <div class="chart-container">
-            <h3><i class='bx bx-history'></i> Recent Activity</h3>
-            <?php if (!empty($recent_activity)): ?>
-                <?php foreach ($recent_activity as $activity): ?>
-                    <div class="activity-item">
-                        <span class="type"><?= htmlspecialchars($activity['type']) ?></span>
-                        <strong><?= htmlspecialchars($activity['name']) ?></strong>
-                        <span class="date"><?= $activity['date_val'] ? date('M d, Y', strtotime($activity['date_val'])) : '-' ?></span>
-                        <br>
-                        <small style="color: #666;">Status: <span style="text-transform: uppercase; color: #3C5B6F;"><?= htmlspecialchars($activity['status']) ?></span></small>
-                    </div>
-                <?php endforeach; ?>
-            <?php else: ?>
-                <div class="empty-message">No recent activity for this range.</div>
-            <?php endif; ?>
+        <div class="chart-container" style="margin-bottom: 20px;">
+            <h3 style="margin-bottom: 10px;"><i class='bx bx-history'></i> Recent Activity</h3>
+            <div style="max-height: 230px; overflow-y: auto; margin: 0 -8px; padding: 0 8px;">
+                <?php if (!empty($recent_activity)): ?>
+                    <?php foreach ($recent_activity as $activity): ?>
+                        <div class="activity-item" style="margin-bottom: 8px; padding: 10px 12px;">
+                            <span class="type"><?= htmlspecialchars($activity['type']) ?></span>
+                            <strong><?= htmlspecialchars($activity['name']) ?></strong>
+                            <span class="date"><?= $activity['date_val'] ? date('M d, Y', strtotime($activity['date_val'])) : '-' ?></span>
+                            <br>
+                            <small style="color: #666; font-size: 11px;">Status: <span style="text-transform: uppercase; color: #3C5B6F;"><?= htmlspecialchars($activity['status']) ?></span></small>
+                        </div>
+                    <?php endforeach; ?>
+                <?php else: ?>
+                    <div class="empty-message">No recent activity for this range.</div>
+                <?php endif; ?>
+            </div>
         </div>
     </section>
 
