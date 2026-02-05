@@ -27,7 +27,7 @@ if (isset($_POST['flag_research'])) {
     $proposal_id = intval($_POST['proposal_id']);
     $flag_note = mysqli_real_escape_string($conn, $_POST['flag_note'] ?? 'Follow-up required');
     
-    $stmt = $conn->prepare("UPDATE proposals SET priority = 'High', amendment_notes = CONCAT(COALESCE(amendment_notes, ''), '\n[HOD FLAG] ', ?) WHERE id = ?");
+    $stmt = $conn->prepare("UPDATE proposals SET health_status = 'AT_RISK', health_notes = ? WHERE id = ?");
     $stmt->bind_param("si", $flag_note, $proposal_id);
     
     if ($stmt->execute()) {
@@ -160,6 +160,7 @@ $active_research_sql = "
         p.title,
         p.researcher_email,
         p.status,
+        p.health_status,
         p.created_at,
         p.approved_at,
         p.approved_budget,
@@ -169,7 +170,7 @@ $active_research_sql = "
         u.name AS researcher_name,
         COUNT(DISTINCT pr.id) AS report_count,
         COUNT(DISTINCT m.id) AS total_milestones,
-        SUM(CASE WHEN m.status = 'COMPLETED' THEN 1 ELSE 0 END) AS completed_milestones,
+        COUNT(DISTINCT CASE WHEN UPPER(TRIM(m.status)) = 'COMPLETED' THEN m.id END) AS completed_milestones,
         MAX(pr.submitted_at) AS last_report_date,
         (SELECT COUNT(*) FROM extension_requests er 
          JOIN progress_reports pr2 ON er.report_id = pr2.id 
@@ -182,8 +183,8 @@ $active_research_sql = "
     LEFT JOIN milestones m ON p.id = m.grant_id
     WHERE UPPER(TRIM(p.status)) IN ('APPROVED','RECOMMENDED')
     GROUP BY p.id
-    ORDER BY p.priority DESC, p.approved_at DESC
-";
+    ORDER BY p.health_status DESC, p.approved_at DESC
+";;
 $active_research = $conn->query($active_research_sql);
 
 // Completed/Archived Research Projects (mapped to available statuses)
@@ -342,13 +343,25 @@ $pending_reimbursements = $conn->query($pending_reimbursements_sql);
             font-weight: 600;
             display: inline-block;
         }
-        .badge-high {
-            background: #ffebee;
-            color: #c62828;
+        .badge-success {
+            background: #e8f5e9;
+            color: #27ae60;
         }
-        .badge-normal {
+        .badge-warning {
+            background: #fff3e0;
+            color: #f39c12;
+        }
+        .badge-danger {
+            background: #ffebee;
+            color: #e74c3c;
+        }
+        .badge-info {
             background: #e3f2fd;
-            color: #1976d2;
+            color: #3498db;
+        }
+        .badge-secondary {
+            background: #f5f5f5;
+            color: #95a5a6;
         }
         .badge-pending {
             background: #fff3e0;
@@ -380,6 +393,13 @@ $pending_reimbursements = $conn->query($pending_reimbursements_sql);
         .btn-flag {
             background: #e74c3c;
             color: white;
+            padding: 10px 24px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.2s;
         }
         .btn-flag:hover {
             background: #c0392b;
@@ -528,16 +548,16 @@ $pending_reimbursements = $conn->query($pending_reimbursements_sql);
 
         <!-- Tab Navigation -->
         <div style="margin-bottom: 0;">
-            <button class="tab-btn active" onclick="openTab(event, 'active-research')">
+            <button class="tab-btn active" data-tab="active-research" onclick="openTab(event, 'active-research')">
                 <i class='bx bx-trending-up'></i> Active Research
             </button>
-            <button class="tab-btn" onclick="openTab(event, 'pending-extensions')">
+            <button class="tab-btn" data-tab="pending-extensions" onclick="openTab(event, 'pending-extensions')">
                 <i class='bx bx-time'></i> Extension Requests
             </button>
-            <button class="tab-btn" onclick="openTab(event, 'pending-reimbursements')">
+            <button class="tab-btn" data-tab="pending-reimbursements" onclick="openTab(event, 'pending-reimbursements')">
                 <i class='bx bx-wallet'></i> Reimbursements
             </button>
-            <button class="tab-btn" onclick="openTab(event, 'completed-research')">
+            <button class="tab-btn" data-tab="completed-research" onclick="openTab(event, 'completed-research')">
                 <i class='bx bx-archive'></i> Completed/Archived
             </button>
         </div>
@@ -572,13 +592,20 @@ $pending_reimbursements = $conn->query($pending_reimbursements_sql);
                                 </div>
                             </div>
                             <div>
-                                <?php if ($project['priority'] === 'High'): ?>
-                                    <span class="badge badge-high">
-                                        <i class='bx bx-flag'></i> HIGH PRIORITY
-                                    </span>
-                                <?php else: ?>
-                                    <span class="badge badge-normal">NORMAL</span>
-                                <?php endif; ?>
+                                <?php 
+                                    $health = $project['health_status'] ?? 'ON_TRACK';
+                                    $health_colors = [
+                                        'ON_TRACK' => ['class' => 'badge-success', 'icon' => 'bx-check-circle', 'label' => 'ON TRACK'],
+                                        'AT_RISK' => ['class' => 'badge-warning', 'icon' => 'bx-alert-circle', 'label' => 'AT RISK'],
+                                        'DELAYED' => ['class' => 'badge-danger', 'icon' => 'bx-x-circle', 'label' => 'DELAYED'],
+                                        'COMPLETED' => ['class' => 'badge-info', 'icon' => 'bx-check', 'label' => 'COMPLETED'],
+                                        'ARCHIVED' => ['class' => 'badge-secondary', 'icon' => 'bx-archive', 'label' => 'ARCHIVED']
+                                    ];
+                                    $config = $health_colors[$health] ?? $health_colors['ON_TRACK'];
+                                ?>
+                                <span class="badge <?= $config['class'] ?>">
+                                    <i class='bx <?= $config['icon'] ?>'></i> <?= $config['label'] ?>
+                                </span>
                             </div>
                         </div>
 
@@ -631,9 +658,6 @@ $pending_reimbursements = $conn->query($pending_reimbursements_sql);
                         <div class="action-btns">
                             <button class="btn-action btn-view" onclick="viewResearchDetails(<?= $project['id'] ?>)">
                                 <i class='bx bx-show'></i> View Details
-                            </button>
-                            <button class="btn-action btn-flag" onclick="flagResearch(<?= $project['id'] ?>, '<?= htmlspecialchars($project['title'], ENT_QUOTES) ?>')">
-                                <i class='bx bx-flag'></i> Flag for Follow-up
                             </button>
                         </div>
                     </div>
@@ -846,7 +870,7 @@ $pending_reimbursements = $conn->query($pending_reimbursements_sql);
                 </div>
                 <div style="text-align: right;">
                     <button type="button" onclick="closeFlagModal()" style="padding: 10px 20px; border: 1px solid #ddd; background: white; border-radius: 5px; cursor: pointer; margin-right: 10px;">Cancel</button>
-                    <button type="submit" name="flag_research" class="btn-flag" style="padding: 10px 20px;">
+                    <button type="submit" name="flag_research" class="btn-flag">
                         <i class='bx bx-flag'></i> Flag Research
                     </button>
                 </div>
@@ -876,6 +900,17 @@ $pending_reimbursements = $conn->query($pending_reimbursements_sql);
                     </button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Research Details Modal -->
+    <div id="researchDetailModal" class="modal">
+        <div class="modal-content" style="max-width: 1100px; width: 92%; height: 85vh; padding: 0; overflow: hidden;">
+            <div class="modal-header" style="padding: 16px 20px; border-bottom: 1px solid #eee;">
+                <h2>Research Details</h2>
+                <span class="modal-close" onclick="document.getElementById('researchDetailModal').classList.remove('show')">&times;</span>
+            </div>
+            <iframe id="researchDetailFrame" src="" style="width: 100%; height: calc(85vh - 60px); border: none;"></iframe>
         </div>
     </div>
 
@@ -920,6 +955,18 @@ $pending_reimbursements = $conn->query($pending_reimbursements_sql);
             document.getElementById(tabName).classList.add('active');
             evt.currentTarget.classList.add('active');
         }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            const params = new URLSearchParams(window.location.search);
+            const tab = params.get('tab');
+            if (!tab) {
+                return;
+            }
+            const tabButton = document.querySelector(`.tab-btn[data-tab="${tab}"]`);
+            if (tabButton && document.getElementById(tab)) {
+                openTab({ currentTarget: tabButton }, tab);
+            }
+        });
 
         // Flag Research Modal
         function flagResearch(proposalId, title) {
@@ -977,7 +1024,11 @@ $pending_reimbursements = $conn->query($pending_reimbursements_sql);
 
         // View Functions
         function viewResearchDetails(proposalId) {
-            window.open('view_research_details.php?id=' + proposalId, '_blank');
+            const modal = document.getElementById('researchDetailModal');
+            const frame = document.getElementById('researchDetailFrame');
+            if (!modal || !frame) return;
+            frame.src = 'view_research_details.php?id=' + proposalId;
+            modal.classList.add('show');
         }
 
         function viewReport(reportId) {
