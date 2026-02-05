@@ -203,11 +203,11 @@ if (isset($_SESSION['role']) && $_SESSION['role'] === 'admin') {
                 <span class="tooltip">Research Progress</span>
             </li>
             <li>
-                <a href="hod_appeal_cases.php" class="<?= $current == 'hod_appeal_cases.php' ? 'active' : '' ?>">
-                    <i class='bx bx-message-square-dots'></i>
-                    <span class="links_name">Appeal Cases</span>
+                <a href="hod_department_reports.php" class="<?= $current == 'hod_department_reports.php' ? 'active' : '' ?>">
+                    <i class='bx bx-spreadsheet'></i>
+                    <span class="links_name">Department Reports</span>
                 </a>
-                <span class="tooltip">Appeal Cases</span>
+                <span class="tooltip">Department Reports</span>
             </li>
         <?php endif; ?>
 
