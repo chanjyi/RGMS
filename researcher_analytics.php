@@ -35,7 +35,7 @@ $stmt->bind_param("s", $email);
 $stmt->execute();
 $stats['budget'] = $stmt->get_result()->fetch_assoc();
 
-// 3. Budget by Category (for approved grants)
+// 3. Budget by Category
 $category_query = "SELECT 
     b.category,
     SUM(b.allocated_amount) as allocated,
@@ -114,22 +114,21 @@ $stats['recent_activity'] = [];
 while($row = $result->fetch_assoc()) {
     $stats['recent_activity'][] = $row;
 }
-
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <title>Research Analytics Dashboard</title>
-    <link rel="stylesheet" href="styling/style.css">
-    <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="styling/style.css"> <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
+        /* Restored original layout styling */
         .analytics-grid { 
             display: grid; 
             grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); 
             gap: 20px; 
-            margin-bottom: 20px; 
+            margin-bottom: 30px; 
         }
         
         .stat-card { 
@@ -138,41 +137,15 @@ while($row = $result->fetch_assoc()) {
             padding: 25px; 
             border-radius: 12px; 
             box-shadow: 0 4px 15px rgba(0,0,0,0.1); 
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
         }
         
-        .stat-card.green { 
-            background: linear-gradient(135deg, #28a745 0%, #20c997 100%); 
-        }
+        .stat-card.green { background: linear-gradient(135deg, #28a745 0%, #20c997 100%); }
+        .stat-card.orange { background: linear-gradient(135deg, #fd7e14 0%, #ffc107 100%); }
+        .stat-card.blue { background: linear-gradient(135deg, #17a2b8 0%, #20c997 100%); }
         
-        .stat-card.orange { 
-            background: linear-gradient(135deg, #fd7e14 0%, #ffc107 100%); 
-        }
-        
-        .stat-card.blue { 
-            background: linear-gradient(135deg, #17a2b8 0%, #20c997 100%); 
-        }
-        
-        .stat-card h3 { 
-            margin: 0 0 10px 0; 
-            font-size: 14px; 
-            opacity: 0.9; 
-            text-transform: uppercase; 
-            letter-spacing: 1px; 
-        }
-        
-        .stat-value { 
-            font-size: 42px; 
-            font-weight: bold; 
-            margin: 10px 0; 
-        }
-        
-        .stat-label { 
-            font-size: 13px; 
-            opacity: 0.8; 
-        }
+        .stat-card h3 { margin: 0 0 10px 0; font-size: 14px; opacity: 0.9; text-transform: uppercase; letter-spacing: 1px; }
+        .stat-value { font-size: 42px; font-weight: bold; margin: 10px 0; }
+        .stat-label { font-size: 13px; opacity: 0.8; }
         
         .chart-container { 
             background: white; 
@@ -184,30 +157,13 @@ while($row = $result->fetch_assoc()) {
             min-height: fit-content;
         }
         
-        .chart-container h3 { 
-            margin: 0 0 15px 0; 
-            color: #3C5B6F; 
-            font-size: 16px; 
-        }
-        
-        .chart-wrapper { 
-            position: relative; 
-            height: 250px;
-            width: 100%;
-        }
+        .chart-container h3 { margin: 0 0 15px 0; color: #3C5B6F; font-size: 16px; }
+        .chart-wrapper { position: relative; height: 250px; width: 100%; }
         
         .grid-2 { 
             display: grid; 
             grid-template-columns: 1fr 1fr; 
             gap: 25px; 
-            margin-bottom: 25px; 
-        }
-        
-        .vertical-stack {
-            display: flex;
-            flex-direction: column;
-            gap: 25px;
-            margin-bottom: 25px;
         }
         
         .activity-list { 
@@ -215,7 +171,6 @@ while($row = $result->fetch_assoc()) {
             padding: 25px; 
             border-radius: 12px; 
             box-shadow: 0 2px 8px rgba(0,0,0,0.1); 
-            margin-bottom: 40px; 
         }
         
         .activity-item { 
@@ -227,86 +182,26 @@ while($row = $result->fetch_assoc()) {
         }
         
         .activity-item .type { 
-            display: inline-block; 
-            padding: 3px 10px; 
-            background: #3C5B6F; 
-            color: white; 
-            border-radius: 12px; 
-            font-size: 11px; 
-            margin-right: 10px; 
+            display: inline-block; padding: 3px 10px; background: #3C5B6F; color: white; border-radius: 12px; font-size: 11px; margin-right: 10px; 
         }
         
-        .activity-item .date { 
-            color: #999; 
-            font-size: 12px; 
-            float: right; 
-        }
+        .activity-item .date { color: #999; font-size: 12px; float: right; }
         
-        .category-bar { 
-            background: #e9ecef; 
-            height: 30px; 
-            border-radius: 15px; 
-            margin: 10px 0; 
-            overflow: hidden; 
-            position: relative; 
-        }
-        
+        .category-bar { background: #e9ecef; height: 30px; border-radius: 15px; margin: 10px 0; overflow: hidden; position: relative; }
         .category-fill { 
-            height: 100%; 
-            background: linear-gradient(90deg, #3C5B6F, #20c997); 
-            transition: width 0.5s; 
-            display: flex; 
-            align-items: center; 
-            padding: 0 15px; 
-            color: white; 
-            font-size: 12px; 
-            font-weight: bold; 
+            height: 100%; background: linear-gradient(90deg, #3C5B6F, #20c997); transition: width 0.5s; 
+            display: flex; align-items: center; padding: 0 15px; color: white; font-size: 12px; font-weight: bold; 
         }
         
-        .summary-box { 
-            background: #f8f9fa; 
-            padding: 20px; 
-            border-radius: 8px; 
-            border-left: 4px solid #3C5B6F; 
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-        }
-        
-        .summary-box h4 { 
-            margin: 0 0 15px 0; 
-            color: #3C5B6F; 
-        }
-        
-        .summary-stats { 
-            display: grid; 
-            grid-template-columns: repeat(4, 1fr); /* changed to 4 columns to fit wide screen better */
-            gap: 15px; 
-        }
-        
-        .summary-stat { 
-            text-align: center; 
-        }
-        
-        .summary-stat .value { 
-            font-size: 28px; 
-            font-weight: bold; 
-            color: #3C5B6F; 
-        }
-        
-        .summary-stat .label { 
-            font-size: 12px; 
-            color: #666; 
-            text-transform: uppercase; 
-        }
+        .summary-box { background: #f8f9fa; padding: 20px; border-radius: 8px; border-left: 4px solid #3C5B6F; margin-bottom: 20px; }
+        .summary-box h4 { margin: 0 0 15px 0; color: #3C5B6F; }
+        .summary-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; }
+        .summary-stat { text-align: center; }
+        .summary-stat .value { font-size: 28px; font-weight: bold; color: #3C5B6F; }
+        .summary-stat .label { font-size: 12px; color: #666; text-transform: uppercase; }
 
         @media (max-width: 768px) {
-            .grid-2 {
-                grid-template-columns: 1fr;
-            }
-            .summary-stats {
-                grid-template-columns: repeat(2, 1fr);
-            }
+            .grid-2 { grid-template-columns: 1fr; }
         }
     </style>
 </head>
@@ -314,14 +209,13 @@ while($row = $result->fetch_assoc()) {
     <?php include 'sidebar.php'; ?>
     
     <section class="home-section">
-
         <a href="researcher_dashboard.php" class="btn-back" style="display: inline-flex; align-items: center; text-decoration: none; color: #3C5B6F; font-weight: 600; margin-bottom: 15px;">
             <i class='bx bx-left-arrow-alt' style="font-size: 20px; margin-right: 5px;"></i> 
             Back to Dashboard
         </a>
 
         <div class="welcome-text">
-            Analytics & Reports
+            Analytics & Reports | <?php echo htmlspecialchars($_SESSION['name'] ?? 'Researcher'); ?>
         </div>
         <hr style="border: 1px solid #3C5B6F; opacity: 0.3; margin-bottom: 25px;">
 
@@ -343,45 +237,38 @@ while($row = $result->fetch_assoc()) {
                 <div class="stat-value">RM<?php echo number_format($stats['budget']['total_spent'] ?? 0, 0); ?></div>
                 <div class="stat-label">Reimbursed to date</div>
             </div>
-        </div>
-
-        <div class="vertical-stack">
+            
             <div class="stat-card blue">
                 <h3><i class='bx bx-trending-up'></i> Success Rate</h3>
                 <div class="stat-value">
                     <?php 
                     $approved = $stats['status']['APPROVED'] ?? 0;
                     $total = $stats['budget']['total_proposals'] ?? 0;
-                    
-                    if ($total > 0) {
-                        echo round(($approved / $total) * 100, 1);
-                    } else {
-                        echo 0;
-                    }
+                    echo ($total > 0) ? round(($approved / $total) * 100, 1) : 0;
                     ?>%
                 </div>
                 <div class="stat-label">Approval percentage</div>
             </div>
+        </div>
 
-            <div class="summary-box">
-                <h4><i class='bx bx-wallet'></i> Budget Overview</h4>
-                <div class="summary-stats">
-                    <div class="summary-stat">
-                        <div class="value">RM<?php echo number_format($stats['budget']['total_requested'] ?? 0, 0); ?></div>
-                        <div class="label">Total Requested</div>
-                    </div>
-                    <div class="summary-stat">
-                        <div class="value">RM<?php echo number_format($stats['budget']['total_approved'] ?? 0, 0); ?></div>
-                        <div class="label">Total Approved</div>
-                    </div>
-                    <div class="summary-stat">
-                        <div class="value">RM<?php echo number_format($stats['budget']['total_spent'] ?? 0, 0); ?></div>
-                        <div class="label">Total Claimed</div>
-                    </div>
-                    <div class="summary-stat">
-                        <div class="value">RM<?php echo number_format(($stats['budget']['total_approved'] ?? 0) - ($stats['budget']['total_spent'] ?? 0), 0); ?></div>
-                        <div class="label">Remaining Balance</div>
-                    </div>
+        <div class="summary-box">
+            <h4><i class='bx bx-wallet'></i> Budget Overview</h4>
+            <div class="summary-stats">
+                <div class="summary-stat">
+                    <div class="value">RM<?php echo number_format($stats['budget']['total_requested'] ?? 0, 0); ?></div>
+                    <div class="label">Total Requested</div>
+                </div>
+                <div class="summary-stat">
+                    <div class="value">RM<?php echo number_format($stats['budget']['total_approved'] ?? 0, 0); ?></div>
+                    <div class="label">Total Approved</div>
+                </div>
+                <div class="summary-stat">
+                    <div class="value">RM<?php echo number_format($stats['budget']['total_spent'] ?? 0, 0); ?></div>
+                    <div class="label">Total Claimed</div>
+                </div>
+                <div class="summary-stat">
+                    <div class="value">RM<?php echo number_format(($stats['budget']['total_approved'] ?? 0) - ($stats['budget']['total_spent'] ?? 0), 0); ?></div>
+                    <div class="label">Remaining Balance</div>
                 </div>
             </div>
         </div>
@@ -393,7 +280,6 @@ while($row = $result->fetch_assoc()) {
                     <canvas id="statusChart"></canvas>
                 </div>
             </div>
-
             <div class="chart-container">
                 <h3><i class='bx bx-bar-chart'></i> Budget Allocation by Category</h3>
                 <div class="chart-wrapper">
@@ -409,7 +295,6 @@ while($row = $result->fetch_assoc()) {
                     <canvas id="trendChart"></canvas>
                 </div>
             </div>
-
             <div class="chart-container">
                 <h3><i class='bx bx-target-lock'></i> Milestone Progress</h3>
                 <div class="chart-wrapper">
@@ -423,21 +308,15 @@ while($row = $result->fetch_assoc()) {
             <div style="max-width: 600px; margin: 0 auto;">
                 <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; text-align: center; margin-bottom: 20px;">
                     <div>
-                        <div style="font-size: 28px; font-weight: bold; color: #3C5B6F;">
-                            <?php echo $stats['expenditures']['total_expenditures'] ?? 0; ?>
-                        </div>
+                        <div style="font-size: 28px; font-weight: bold; color: #3C5B6F;"><?php echo $stats['expenditures']['total_expenditures'] ?? 0; ?></div>
                         <div style="font-size: 12px; color: #666;">Total Expenditures</div>
                     </div>
                     <div>
-                        <div style="font-size: 28px; font-weight: bold; color: #28a745;">
-                            RM<?php echo number_format($stats['expenditures']['approved_amount'] ?? 0, 0); ?>
-                        </div>
+                        <div style="font-size: 28px; font-weight: bold; color: #28a745;">RM<?php echo number_format($stats['expenditures']['approved_amount'] ?? 0, 0); ?></div>
                         <div style="font-size: 12px; color: #666;">Approved Claims</div>
                     </div>
                     <div>
-                        <div style="font-size: 28px; font-weight: bold; color: #ffc107;">
-                            RM<?php echo number_format($stats['expenditures']['pending_amount'] ?? 0, 0); ?>
-                        </div>
+                        <div style="font-size: 28px; font-weight: bold; color: #ffc107;">RM<?php echo number_format($stats['expenditures']['pending_amount'] ?? 0, 0); ?></div>
                         <div style="font-size: 12px; color: #666;">Pending Claims</div>
                     </div>
                 </div>
@@ -452,7 +331,7 @@ while($row = $result->fetch_assoc()) {
                 ?>
                     <div style="margin-bottom: 20px;">
                         <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-                            <strong><?php echo $cat['category']; ?></strong>
+                            <strong><?php echo htmlspecialchars($cat['category']); ?></strong>
                             <span style="color: #666;">RM<?php echo number_format($cat['spent'], 2); ?> / RM<?php echo number_format($cat['allocated'], 2); ?></span>
                         </div>
                         <div class="category-bar">
@@ -490,16 +369,10 @@ while($row = $result->fetch_assoc()) {
     <script>
     window.addEventListener('load', function() {
         const colors = {
-            primary: '#3C5B6F',
-            success: '#28a745',
-            warning: '#ffc107',
-            danger: '#dc3545',
-            info: '#17a2b8',
-            secondary: '#6c757d',
-            dark: '#2c4555'
+            primary: '#3C5B6F', success: '#28a745', warning: '#ffc107',
+            danger: '#dc3545', info: '#17a2b8', secondary: '#6c757d', dark: '#2c4555'
         };
 
-        // Status Chart
         const statusEl = document.getElementById('statusChart');
         if (statusEl) {
             new Chart(statusEl, {
@@ -509,24 +382,13 @@ while($row = $result->fetch_assoc()) {
                     datasets: [{
                         data: <?php echo json_encode(array_values($stats['status'])); ?>,
                         backgroundColor: [colors.success, colors.info, colors.warning, colors.danger, colors.primary, colors.secondary, colors.dark],
-                        borderWidth: 2,
-                        borderColor: '#fff'
+                        borderWidth: 2, borderColor: '#fff'
                     }]
                 },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { 
-                            position: 'right',
-                            labels: { padding: 8, font: { size: 10 }, boxWidth: 12 }
-                        }
-                    }
-                }
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { padding: 8, font: { size: 10 }, boxWidth: 12 } } } }
             });
         }
 
-        // Category Chart
         const categoryEl = document.getElementById('categoryChart');
         if (categoryEl) {
             new Chart(categoryEl, {
@@ -538,24 +400,17 @@ while($row = $result->fetch_assoc()) {
                         { label: 'Spent', data: <?php echo json_encode(array_map('floatval', array_column($stats['categories'], 'spent'))); ?>, backgroundColor: colors.success }
                     ]
                 },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        y: { 
-                            beginAtZero: true,
-                            ticks: { callback: function(val) { return 'RM' + val; }, font: { size: 9 } }
-                        },
+                options: { 
+                    responsive: true, maintainAspectRatio: false, 
+                    scales: { 
+                        y: { beginAtZero: true, ticks: { callback: function(val) { return 'RM' + val; }, font: { size: 9 } } },
                         x: { ticks: { font: { size: 9 } } }
                     },
-                    plugins: {
-                        legend: { position: 'top', labels: { boxWidth: 12, padding: 8, font: { size: 10 } } }
-                    }
+                    plugins: { legend: { position: 'top', labels: { boxWidth: 12, padding: 8, font: { size: 10 } } } }
                 }
             });
         }
 
-        // Trend Chart
         const trendEl = document.getElementById('trendChart');
         if (trendEl) {
             new Chart(trendEl, {
@@ -565,25 +420,17 @@ while($row = $result->fetch_assoc()) {
                     datasets: [{
                         label: 'Proposals',
                         data: <?php echo json_encode(array_map('intval', array_column($stats['trends'], 'submissions'))); ?>,
-                        borderColor: colors.primary,
-                        backgroundColor: 'rgba(60, 91, 111, 0.1)',
-                        tension: 0.4,
-                        fill: true
+                        borderColor: colors.primary, backgroundColor: 'rgba(60, 91, 111, 0.1)', tension: 0.4, fill: true
                     }]
                 },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: { 
-                        y: { beginAtZero: true, ticks: { stepSize: 1, font: { size: 9 } } },
-                        x: { ticks: { font: { size: 9 } } }
-                    },
+                options: { 
+                    responsive: true, maintainAspectRatio: false, 
+                    scales: { y: { beginAtZero: true, ticks: { stepSize: 1, font: { size: 9 } } }, x: { ticks: { font: { size: 9 } } } },
                     plugins: { legend: { position: 'top', labels: { boxWidth: 12, padding: 8, font: { size: 10 } } } }
                 }
             });
         }
 
-        // Milestone Chart
         const milestoneEl = document.getElementById('milestoneChart');
         if (milestoneEl) {
             new Chart(milestoneEl, {
@@ -598,15 +445,10 @@ while($row = $result->fetch_assoc()) {
                             <?php echo intval($stats['milestones']['delayed'] ?? 0); ?>
                         ],
                         backgroundColor: [colors.success, colors.info, colors.warning, colors.danger],
-                        borderWidth: 2,
-                        borderColor: '#fff'
+                        borderWidth: 2, borderColor: '#fff'
                     }]
                 },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { position: 'bottom', labels: { padding: 8, font: { size: 10 }, boxWidth: 12 } } }
-                }
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { padding: 8, font: { size: 10 }, boxWidth: 12 } } } }
             });
         }
     });
