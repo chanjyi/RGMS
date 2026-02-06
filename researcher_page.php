@@ -1501,9 +1501,9 @@ $my_reports = $stmt->get_result();
                     <input type="date" name="transaction_date" required value="<?= date('Y-m-d') ?>">
                 </div>
                 <div class="input-group">
-                    <label>Upload Receipt (MANDATORY) *</label>
+                    <label>Upload Receipt/Invoice (MANDATORY) *</label>
                     <input type="file" name="receipt_file" accept=".pdf,.jpg,.jpeg,.png" required>
-                    <small style="color:#dc3545; font-weight:600;">⚠ Receipt is mandatory. Accepted: PDF, JPG, PNG</small>
+                    <small style="color:#dc3545; font-weight:600;">⚠ Receipt/Invoice is mandatory. Accepted: PDF, JPG, PNG</small>
                 </div>
                 <button type="submit" name="log_expenditure" class="btn-save">
                     <i class='bx bx-save'></i> Log Expenditure

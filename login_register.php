@@ -108,7 +108,7 @@ if (isset($_POST['login'])) {
 
             // Redirect based on role
             if ($roleLower === 'researcher') {
-                header("Location: researcher_page.php");
+                header("Location: researcher_dashboard.php");
             } elseif ($roleLower === 'reviewer') {
                 header("Location: reviewer_page.php");
             } elseif ($roleLower === 'hod') {
