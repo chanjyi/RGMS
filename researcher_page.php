@@ -35,84 +35,97 @@ if (isset($_POST['submit_proposal'])) {
     $duration_months = intval($_POST['duration_months']);
     $budget_requested = floatval($_POST['budget_requested']);
     
-    // Budget breakdown by category
-    $budget_equipment = floatval($_POST['budget_equipment'] ?? 0);
-    $budget_materials = floatval($_POST['budget_materials'] ?? 0);
-    $budget_travel = floatval($_POST['budget_travel'] ?? 0);
-    $budget_personnel = floatval($_POST['budget_personnel'] ?? 0);
-    $budget_other = floatval($_POST['budget_other'] ?? 0);
-    
-    $target_dir = "uploads/";
-    if (!is_dir($target_dir)) mkdir($target_dir, 0777, true);
-    
-    $file_name = basename($_FILES["proposal_file"]["name"]);
-    $file_type = strtolower(pathinfo($file_name, PATHINFO_EXTENSION));
-    $clean_email = str_replace(['@', '.'], '_', $email);
-    $new_file_name = "prop_" . time() . "_" . $clean_email . "." . $file_type;
-    $target_file = $target_dir . $new_file_name;
+    // Capture milestone deadlines early for validation
+    $milestone_deadlines = $_POST['milestone_deadline'] ?? [];
+    $date_error = false;
+    $current_date = date('Y-m-d');
 
-    if ($file_type != "pdf") {
-        $message = "Error: Only PDF allowed."; 
+    // VALIDATION: Check if any deadline is in the past
+    foreach ($milestone_deadlines as $date) {
+        if (!empty($date) && $date < $current_date) {
+            $date_error = true;
+            break;
+        }
+    }
+
+    if ($date_error) {
+        $message = "Error: Milestone deadlines cannot be in the past."; 
         $messageType = "error";
     } else {
-        if (move_uploaded_file($_FILES["proposal_file"]["tmp_name"], $target_file)) {
-            // Insert proposal
-            $stmt = $conn->prepare("INSERT INTO proposals (title, description, researcher_email, file_path, budget_requested, duration_months, status) VALUES (?, ?, ?, ?, ?, ?, 'SUBMITTED')");
-            $stmt->bind_param("ssssdi", $title, $description, $email, $target_file, $budget_requested, $duration_months);
-            
-            if ($stmt->execute()) {
-                $proposal_id = $conn->insert_id;
+        // Budget breakdown by category
+        $budget_equipment = floatval($_POST['budget_equipment'] ?? 0);
+        $budget_materials = floatval($_POST['budget_materials'] ?? 0);
+        $budget_travel = floatval($_POST['budget_travel'] ?? 0);
+        $budget_personnel = floatval($_POST['budget_personnel'] ?? 0);
+        $budget_other = floatval($_POST['budget_other'] ?? 0);
+        
+        $target_dir = "uploads/";
+        if (!is_dir($target_dir)) mkdir($target_dir, 0777, true);
+        
+        $file_name = basename($_FILES["proposal_file"]["name"]);
+        $file_type = strtolower(pathinfo($file_name, PATHINFO_EXTENSION));
+        $clean_email = str_replace(['@', '.'], '_', $email);
+        $new_file_name = "prop_" . time() . "_" . $clean_email . "." . $file_type;
+        $target_file = $target_dir . $new_file_name;
 
-                log_activity($conn, "CREATE", "PROPOSAL", (int)$proposal_id, "Submit Proposal", "Researcher submitted proposal: $title");
+        if ($file_type != "pdf") {
+            $message = "Error: Only PDF allowed."; 
+            $messageType = "error";
+        } else {
+            if (move_uploaded_file($_FILES["proposal_file"]["tmp_name"], $target_file)) {
+                // Insert proposal
+                $stmt = $conn->prepare("INSERT INTO proposals (title, description, researcher_email, file_path, budget_requested, duration_months, status) VALUES (?, ?, ?, ?, ?, ?, 'SUBMITTED')");
+                $stmt->bind_param("ssssdi", $title, $description, $email, $target_file, $budget_requested, $duration_months);
                 
-                // Insert budget breakdown into budget_items table
-                $categories = [
-                    'Equipment' => $budget_equipment,
-                    'Materials' => $budget_materials,
-                    'Travel' => $budget_travel,
-                    'Personnel' => $budget_personnel,
-                    'Other' => $budget_other
-                ];
-                
-                foreach ($categories as $category => $amount) {
-                    if ($amount > 0) {
-                        $budget_stmt = $conn->prepare("INSERT INTO budget_items (proposal_id, category, allocated_amount, description) VALUES (?, ?, ?, ?)");
-                        $desc = "$category budget";
-                        $budget_stmt->bind_param("isds", $proposal_id, $category, $amount, $desc);
-                        $budget_stmt->execute();
+                if ($stmt->execute()) {
+                    $proposal_id = $conn->insert_id;
+
+                    log_activity($conn, "CREATE", "PROPOSAL", (int)$proposal_id, "Submit Proposal", "Researcher submitted proposal: $title");
+                    
+                    // Insert budget breakdown into budget_items table
+                    $categories = [
+                        'Equipment' => $budget_equipment,
+                        'Materials' => $budget_materials,
+                        'Travel' => $budget_travel,
+                        'Personnel' => $budget_personnel,
+                        'Other' => $budget_other
+                    ];
+                    
+                    foreach ($categories as $category => $amount) {
+                        if ($amount > 0) {
+                            $budget_stmt = $conn->prepare("INSERT INTO budget_items (proposal_id, category, allocated_amount, description) VALUES (?, ?, ?, ?)");
+                            $desc = "$category budget";
+                            $budget_stmt->bind_param("isds", $proposal_id, $category, $amount, $desc);
+                            $budget_stmt->execute();
+                        }
                     }
-                }
 
-                // Capture milestone inputs
-                $milestone_titles = $_POST['milestone_title'] ?? [];
-                $milestone_descs = $_POST['milestone_desc'] ?? [];
-                $milestone_deadlines = $_POST['milestone_deadline'] ?? [];
-
-                // Insert milestones with deadlines
-                for ($i = 0; $i < count($milestone_titles); $i++) {
-                    // Check if title and deadline are provided (instead of target_date)
-                    if (!empty($milestone_titles[$i]) && !empty($milestone_deadlines[$i])) {
-                        $m_stmt = $conn->prepare("INSERT INTO milestones (grant_id, title, description, report_deadline, status) VALUES (?, ?, ?, ?, 'PENDING')");
-                        
-                        $deadline = $milestone_deadlines[$i]; // Direct assignment since it is required now
-                        
-                        // Updated bind_param: "isss" (integer, string, string, string)
-                        $m_stmt->bind_param("isss", $proposal_id, $milestone_titles[$i], $milestone_descs[$i], $deadline);
-                        $m_stmt->execute();
+                    // Capture milestone inputs (Titles and Descriptions)
+                    $milestone_titles = $_POST['milestone_title'] ?? [];
+                    $milestone_descs = $_POST['milestone_desc'] ?? [];
+                    
+                    // Insert milestones with deadlines (REMOVED target_date)
+                    for ($i = 0; $i < count($milestone_titles); $i++) {
+                        if (!empty($milestone_titles[$i]) && !empty($milestone_deadlines[$i])) {
+                            $m_stmt = $conn->prepare("INSERT INTO milestones (grant_id, title, description, report_deadline, status) VALUES (?, ?, ?, ?, 'PENDING')");
+                            $deadline = $milestone_deadlines[$i];
+                            $m_stmt->bind_param("isss", $proposal_id, $milestone_titles[$i], $milestone_descs[$i], $deadline);
+                            $m_stmt->execute();
+                        }
                     }
+                                    
+                    // Create initial document version
+                    $version_stmt = $conn->prepare("INSERT INTO document_versions (proposal_id, version_number, file_path, uploaded_by) VALUES (?, 'v1.0', ?, ?)");
+                    $version_stmt->bind_param("iss", $proposal_id, $target_file, $email);
+                    $version_stmt->execute();
+                    
+                    notifySystem($conn, 'admin', "New Proposal Submitted: '$title' by $email");
+                    $message = "Proposal submitted successfully with budget breakdown and milestones!"; 
+                    $messageType = "success";
+                } else {
+                    $message = "DB Error: " . $conn->error; 
+                    $messageType = "error";
                 }
-                                
-                // Create initial document version
-                $version_stmt = $conn->prepare("INSERT INTO document_versions (proposal_id, version_number, file_path, uploaded_by) VALUES (?, 'v1.0', ?, ?)");
-                $version_stmt->bind_param("iss", $proposal_id, $target_file, $email);
-                $version_stmt->execute();
-                
-                notifySystem($conn, 'admin', "New Proposal Submitted: '$title' by $email");
-                $message = "Proposal submitted successfully with budget breakdown and milestones!"; 
-                $messageType = "success";
-            } else {
-                $message = "DB Error: " . $conn->error; 
-                $messageType = "error";
             }
         }
     }
@@ -696,7 +709,6 @@ $my_reports = $stmt->get_result();
             </div>
         <?php endif; ?>
 
-        <!-- Tab Navigation -->
         <div style="margin-bottom: 0;">
             <button class="tab-btn active" onclick="openTab(event, 'proposals')">
                 <i class='bx bx-file'></i> My Proposals
@@ -712,7 +724,6 @@ $my_reports = $stmt->get_result();
             </button>
         </div>
 
-        <!-- ========== TAB 1: PROPOSALS ========== -->
         <div id="proposals" class="tab-content active">
             <div class="form-box" style="margin-bottom: 30px; background:#f8f9fa; padding:25px; border-radius:8px;">
                 <h3 style="margin-top:0; color:#3C5B6F;">
@@ -802,11 +813,10 @@ $my_reports = $stmt->get_result();
                                 <label>Description</label>
                                 <textarea name="milestone_desc[]" placeholder="Brief description of this milestone" rows="2"></textarea>
                             </div>
-                            <div class="grid-2">
-                                <div class="input-group" style="margin-bottom: 0;">
-                                    <label>Milestone Deadline *</label>
-                                    <input type="date" name="milestone_deadline[]" required title="Deadline for completing this milestone">
-                                </div>
+                            
+                            <div class="input-group" style="margin-bottom: 0;">
+                                <label>Milestone Deadline *</label>
+                                <input type="date" name="milestone_deadline[]" required title="Deadline for completing this milestone" min="<?= date('Y-m-d'); ?>">
                             </div>
                         </div>
                     </div>
@@ -924,7 +934,6 @@ $my_reports = $stmt->get_result();
             </table>
         </div>
 
-        <!-- ========== TAB 2: GRANTS & BUDGET ========== -->
         <div id="grants" class="tab-content">
             <h3 style="color:#3C5B6F; margin-top:0;">
                 <i class='bx bx-wallet'></i> Active Grants - Financial Overview
@@ -971,7 +980,6 @@ $my_reports = $stmt->get_result();
                             </div>
                         </div>
                         
-                        <!-- BUDGET BREAKDOWN BY CATEGORY -->
                         <h5 style="margin-top:20px; color:#3C5B6F;">Budget Breakdown</h5>
                         <div class="budget-breakdown">
                             <?php
@@ -999,7 +1007,6 @@ $my_reports = $stmt->get_result();
                             <?php endwhile; ?>
                         </div>
                         
-                        <!-- MILESTONES -->
                         <h5 style="margin-top:20px; color:#3C5B6F;">Project Milestones</h5>
                         <?php
                         $m_query = $conn->prepare("SELECT * FROM milestones WHERE grant_id = ? ORDER BY report_deadline");
@@ -1037,7 +1044,6 @@ $my_reports = $stmt->get_result();
                             <p style="color:#999; font-style:italic;">No milestones defined for this grant</p>
                         <?php endif; ?>
                         
-                        <!-- EXPENDITURE HISTORY -->
                         <h5 style="margin-top:20px; color:#3C5B6F;">Recent Expenditures</h5>
                         <?php
                         $exp_query = $conn->prepare("
@@ -1107,7 +1113,6 @@ $my_reports = $stmt->get_result();
             <?php endif; ?>
         </div>
 
-        <!-- ========== TAB 3: EXPENDITURES & CLAIMS ========== -->
         <div id="expenditures" class="tab-content">
             <?php 
             $active_grants_query = $conn->prepare("SELECT * FROM proposals WHERE researcher_email = ? AND status = 'APPROVED' ORDER BY approved_at DESC");
@@ -1274,7 +1279,6 @@ $my_reports = $stmt->get_result();
             <?php endif; ?>
         </div>
 
-        <!-- ========== TAB 4: PROGRESS REPORTS ========== -->
         <div id="reports" class="tab-content">
             <h3 style="color:#3C5B6F; margin-top:0;">
                 <i class='bx bx-bar-chart-alt-2'></i> My Progress Reports
@@ -1372,9 +1376,6 @@ $my_reports = $stmt->get_result();
         </div>
     </section>
 
-    <!-- ========== MODALS ========== -->
-    
-    <!-- MODAL: DELETE CONFIRMATION -->
     <div id="deleteModal" class="modal">
         <div class="modal-content" style="width:40%; max-width:500px;">
             <span class="close" onclick="closeModal('deleteModal')">&times;</span>
@@ -1396,7 +1397,6 @@ $my_reports = $stmt->get_result();
         </div>
     </div>
 
-    <!-- MODAL: APPEAL PROPOSAL -->
     <div id="appealModal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeModal('appealModal')">&times;</span>
@@ -1422,7 +1422,6 @@ $my_reports = $stmt->get_result();
         </div>
     </div>
 
-    <!-- MODAL: AMEND PROPOSAL -->
     <div id="amendModal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeModal('amendModal')">&times;</span>
@@ -1452,7 +1451,6 @@ $my_reports = $stmt->get_result();
         </div>
     </div>
 
-    <!-- MODAL: SUBMIT PROGRESS REPORT -->
     <div id="reportModal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeModal('reportModal')">&times;</span>
@@ -1474,7 +1472,6 @@ $my_reports = $stmt->get_result();
                     <textarea name="challenges" rows="3" placeholder="Describe any obstacles encountered..."></textarea>
                 </div>
                 
-                <!-- MILESTONE TRACKING -->
                 <div class="input-group">
                     <label>Mark Completed Milestones</label>
                     <div class="milestone-list" id="milestone_container">
@@ -1496,7 +1493,6 @@ $my_reports = $stmt->get_result();
         </div>
     </div>
 
-    <!-- MODAL: LOG EXPENDITURE -->
     <div id="expenditureModal" class="modal">
         <div class="modal-content" style="width:50%; max-width:600px;">
             <span class="close" onclick="closeModal('expenditureModal')">&times;</span>
@@ -1530,7 +1526,6 @@ $my_reports = $stmt->get_result();
         </div>
     </div>
 
-    <!-- MODAL: REQUEST DEADLINE EXTENSION FOR MILESTONES -->
     <div id="extModal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeModal('extModal')">&times;</span>
@@ -1597,6 +1592,10 @@ $my_reports = $stmt->get_result();
         // ========== MILESTONE MANAGEMENT ==========
         function addMilestone() {
             var container = document.getElementById('milestones_container');
+            
+            // Get today's date in YYYY-MM-DD format for min attribute
+            var today = new Date().toISOString().split('T')[0];
+
             var newMilestone = document.createElement('div');
             newMilestone.className = 'milestone-card';
             newMilestone.innerHTML = `
@@ -1612,7 +1611,7 @@ $my_reports = $stmt->get_result();
                 
                 <div class="input-group" style="margin-bottom: 0;">
                     <label>Milestone Deadline *</label>
-                    <input type="date" name="milestone_deadline[]" required title="Deadline for completing this milestone">
+                    <input type="date" name="milestone_deadline[]" required title="Deadline for completing this milestone" min="${today}">
                 </div>
             `;
             container.appendChild(newMilestone);
