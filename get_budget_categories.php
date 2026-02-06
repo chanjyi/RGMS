@@ -1,68 +1,66 @@
 <?php
-// get_budget_categories.php - Fetch budget categories for a specific grant
 session_start();
-require 'config.php';
+require_once 'config.php';
 
 header('Content-Type: application/json');
 
-// Security check
+// Check if user is logged in and is a researcher
 if (!isset($_SESSION['email']) || $_SESSION['role'] != 'researcher') {
-    http_response_code(401);
     echo json_encode(['error' => 'Unauthorized access']);
     exit();
 }
 
+$email = $_SESSION['email'];
+
+// Get grant_id from request
 if (!isset($_GET['grant_id']) || empty($_GET['grant_id'])) {
-    http_response_code(400);
     echo json_encode(['error' => 'Grant ID is required']);
     exit();
 }
 
 $grant_id = intval($_GET['grant_id']);
-$email = $_SESSION['email'];
 
-// Validate grant_id is a positive integer
-if ($grant_id <= 0) {
-    http_response_code(400);
-    echo json_encode(['error' => 'Invalid Grant ID']);
+// Verify that this grant belongs to the researcher
+$verify_stmt = $conn->prepare("SELECT id FROM proposals WHERE id = ? AND researcher_email = ? AND status = 'APPROVED'");
+$verify_stmt->bind_param("is", $grant_id, $email);
+$verify_stmt->execute();
+$verify_result = $verify_stmt->get_result();
+
+if ($verify_result->num_rows === 0) {
+    echo json_encode(['error' => 'Grant not found or does not belong to you']);
     exit();
 }
 
-try {
-    // Verify this grant belongs to the researcher and is approved
-    $verify = $conn->prepare("SELECT id FROM proposals WHERE id = ? AND researcher_email = ? AND status = 'APPROVED'");
-    $verify->bind_param("is", $grant_id, $email);
-    $verify->execute();
-    $verify_result = $verify->get_result();
+// Fetch budget categories with allocated and spent amounts
+$budget_query = "SELECT 
+                    id,
+                    category_name,
+                    allocated_amount,
+                    spent_amount,
+                    (allocated_amount - spent_amount) AS remaining_amount
+                 FROM budget_items 
+                 WHERE grant_id = ?
+                 ORDER BY category_name ASC";
+                     
+$b_stmt = $conn->prepare($budget_query);
+$b_stmt->bind_param("i", $grant_id);
+$b_stmt->execute();
+$b_result = $b_stmt->get_result();
 
-    if ($verify_result->num_rows === 0) {
-        http_response_code(404);
-        echo json_encode(['error' => 'Grant not found or not accessible']);
-        exit();
-    }
-
-    // Fetch budget categories for this grant
-    $query = $conn->prepare("
-        SELECT id, category, description, allocated_amount, spent_amount 
-        FROM budget_items 
-        WHERE proposal_id = ? 
-        ORDER BY category ASC
-    ");
-    $query->bind_param("i", $grant_id);
-    $query->execute();
-    $result = $query->get_result();
-
-    $categories = [];
-    while ($row = $result->fetch_assoc()) {
-        $categories[] = $row;
-    }
-
-    http_response_code(200);
-    echo json_encode($categories);
-
-} catch (Exception $e) {
-    error_log("Error fetching budget categories: " . $e->getMessage());
-    http_response_code(500);
-    echo json_encode(['error' => 'An error occurred while fetching budget categories']);
+$budget_categories = [];
+while ($budget = $b_result->fetch_assoc()) {
+    $budget_categories[] = [
+        'id' => $budget['id'],
+        'category_name' => $budget['category_name'],
+        'allocated_amount' => floatval($budget['allocated_amount']),
+        'spent_amount' => floatval($budget['spent_amount']),
+        'remaining_amount' => floatval($budget['remaining_amount'])
+    ];
 }
+
+echo json_encode($budget_categories);
+
+$b_stmt->close();
+$verify_stmt->close();
+$conn->close();
 ?>

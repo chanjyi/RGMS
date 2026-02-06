@@ -27,7 +27,7 @@ SET time_zone = "+00:00";
 -- Table structure for table `activity_logs`
 --
 
-CREATE TABLE `activity_logs` (
+CREATE TABLE IF NOT EXISTS `activity_logs` (
   `id` int(11) NOT NULL,
   `actor_email` varchar(255) NOT NULL,
   `actor_role` varchar(50) NOT NULL,
@@ -97,7 +97,7 @@ INSERT INTO `activity_logs` (`id`, `actor_email`, `actor_role`, `ip_address`, `a
 -- Table structure for table `appeal_requests`
 --
 
-CREATE TABLE `appeal_requests` (
+CREATE TABLE IF NOT EXISTS `appeal_requests` (
   `id` int(11) NOT NULL,
   `proposal_id` int(11) NOT NULL,
   `researcher_email` varchar(255) NOT NULL,
@@ -120,7 +120,7 @@ INSERT INTO `appeal_requests` (`id`, `proposal_id`, `researcher_email`, `justifi
 -- Table structure for table `budget_items`
 --
 
-CREATE TABLE `budget_items` (
+CREATE TABLE IF NOT EXISTS `budget_items` (
   `id` int(11) NOT NULL,
   `proposal_id` int(11) NOT NULL,
   `category` enum('Equipment','Materials','Travel','Personnel','Other') NOT NULL,
@@ -162,7 +162,7 @@ INSERT INTO `budget_items` (`id`, `proposal_id`, `category`, `description`, `all
 -- Table structure for table `departments`
 --
 
-CREATE TABLE `departments` (
+CREATE TABLE IF NOT EXISTS `departments` (
   `id` int(11) NOT NULL,
   `name` varchar(255) NOT NULL,
   `code` varchar(50) DEFAULT NULL,
@@ -187,7 +187,7 @@ INSERT INTO `departments` (`id`, `name`, `code`, `description`, `available_budge
 -- Table structure for table `document_versions`
 --
 
-CREATE TABLE `document_versions` (
+CREATE TABLE IF NOT EXISTS `document_versions` (
   `id` int(11) NOT NULL,
   `proposal_id` int(11) NOT NULL,
   `version_number` varchar(20) NOT NULL,
@@ -223,7 +223,7 @@ INSERT INTO `document_versions` (`id`, `proposal_id`, `version_number`, `file_pa
 -- Table structure for table `expenditures`
 --
 
-CREATE TABLE `expenditures` (
+CREATE TABLE IF NOT EXITS `expenditures` (
   `id` int(11) NOT NULL,
   `budget_item_id` int(11) NOT NULL,
   `amount` decimal(10,2) NOT NULL,
@@ -252,7 +252,7 @@ INSERT INTO `expenditures` (`id`, `budget_item_id`, `amount`, `transaction_date`
 -- Table structure for table `extension_requests`
 --
 
-CREATE TABLE `extension_requests` (
+CREATE TABLE IF NOT EXISTS `extension_requests` (
   `id` int(11) NOT NULL,
   `report_id` int(11) NOT NULL,
   `researcher_email` varchar(255) NOT NULL,
@@ -276,7 +276,7 @@ INSERT INTO `extension_requests` (`id`, `report_id`, `researcher_email`, `new_de
 -- Table structure for table `fund`
 --
 
-CREATE TABLE `fund` (
+CREATE TABLE IF NOT EXISTS `fund` (
   `fund_id` int(11) NOT NULL,
   `proposal_id` int(11) NOT NULL,
   `grant_number` varchar(50) NOT NULL,
@@ -304,7 +304,7 @@ INSERT INTO `fund` (`fund_id`, `proposal_id`, `grant_number`, `amount_allocated`
 -- Table structure for table `grant_allocation`
 --
 
-CREATE TABLE `grant_allocation` (
+CREATE TABLE IF NOT EXISTS `grant_allocation` (
   `allocation_id` int(11) NOT NULL,
   `fund_id` int(11) NOT NULL,
   `requested_budget` decimal(12,2) NOT NULL,
@@ -330,7 +330,7 @@ INSERT INTO `grant_allocation` (`allocation_id`, `fund_id`, `requested_budget`, 
 -- Table structure for table `grant_document`
 --
 
-CREATE TABLE `grant_document` (
+CREATE TABLE IF NOT EXISTS `grant_document` (
   `document_id` int(11) NOT NULL,
   `fund_id` int(11) NOT NULL,
   `document_type` enum('Receipt','Legal','Report','Other') DEFAULT 'Other',
@@ -347,7 +347,7 @@ CREATE TABLE `grant_document` (
 -- Table structure for table `hod_tier_assignment`
 --
 
-CREATE TABLE `hod_tier_assignment` (
+CREATE TABLE IF NOT EXISTS `hod_tier_assignment` (
   `assignment_id` int(11) NOT NULL,
   `proposal_id` int(11) NOT NULL,
   `hod_id` int(10) UNSIGNED NOT NULL,
@@ -375,7 +375,7 @@ INSERT INTO `hod_tier_assignment` (`assignment_id`, `proposal_id`, `hod_id`, `ti
 -- Table structure for table `issue_messages`
 --
 
-CREATE TABLE `issue_messages` (
+CREATE TABLE IF NOT EXISTS `issue_messages` (
   `id` int(11) NOT NULL,
   `report_id` int(11) NOT NULL,
   `sender_role` varchar(20) NOT NULL,
@@ -393,7 +393,7 @@ CREATE TABLE `issue_messages` (
 -- Table structure for table `milestones`
 --
 
-CREATE TABLE `milestones` (
+CREATE TABLE IF NOT EXISTS `milestones` (
   `id` int(11) NOT NULL,
   `grant_id` int(11) NOT NULL,
   `title` varchar(255) NOT NULL,
@@ -431,7 +431,7 @@ INSERT INTO `milestones` (`id`, `grant_id`, `title`, `description`, `target_date
 -- Table structure for table `misconduct_reports`
 --
 
-CREATE TABLE `misconduct_reports` (
+CREATE TABLE IF NOT EXISTS `misconduct_reports` (
   `id` int(11) NOT NULL,
   `proposal_id` int(11) DEFAULT NULL,
   `reviewer_email` varchar(255) NOT NULL,
@@ -455,7 +455,7 @@ INSERT INTO `misconduct_reports` (`id`, `proposal_id`, `reviewer_email`, `resear
 -- Table structure for table `notifications`
 --
 
-CREATE TABLE `notifications` (
+CREATE TABLE IF NOT EXISTS `notifications` (
   `id` int(11) NOT NULL,
   `user_email` varchar(255) NOT NULL,
   `message` text NOT NULL,
@@ -526,7 +526,7 @@ INSERT INTO `notifications` (`id`, `user_email`, `message`, `is_read`, `created_
 -- Table structure for table `progress_reports`
 --
 
-CREATE TABLE `progress_reports` (
+CREATE TABLE IF NOT EXISTS `progress_reports` (
   `id` int(11) NOT NULL,
   `proposal_id` int(11) NOT NULL,
   `researcher_email` varchar(255) NOT NULL,
@@ -562,7 +562,7 @@ INSERT INTO `progress_reports` (`id`, `proposal_id`, `researcher_email`, `title`
 -- Table structure for table `proposals`
 --
 
-CREATE TABLE `proposals` (
+CREATE TABLE IF NOT EXISTS `proposals` (
   `id` int(11) NOT NULL,
   `title` varchar(255) NOT NULL,
   `description` text DEFAULT NULL,
@@ -610,7 +610,7 @@ INSERT INTO `proposals` (`id`, `title`, `description`, `researcher_email`, `file
 -- Table structure for table `proposal_rubric`
 --
 
-CREATE TABLE `proposal_rubric` (
+CREATE TABLE IF NOT EXISTS `proposal_rubric` (
   `rubric_id` int(11) NOT NULL,
   `proposal_id` int(11) NOT NULL,
   `hod_id` int(10) UNSIGNED NOT NULL,
@@ -642,7 +642,7 @@ INSERT INTO `proposal_rubric` (`rubric_id`, `proposal_id`, `hod_id`, `outcome_sc
 -- Table structure for table `reimbursement_requests`
 --
 
-CREATE TABLE `reimbursement_requests` (
+CREATE TABLE IF NOT EXISTS `reimbursement_requests` (
   `id` int(11) NOT NULL,
   `grant_id` int(11) NOT NULL,
   `researcher_email` varchar(255) NOT NULL,
@@ -669,7 +669,7 @@ INSERT INTO `reimbursement_requests` (`id`, `grant_id`, `researcher_email`, `tot
 -- Table structure for table `research_progress`
 --
 
-CREATE TABLE `research_progress` (
+CREATE TABLE IF NOT EXISTS `research_progress` (
   `progress_id` int(11) NOT NULL,
   `fund_id` int(11) NOT NULL,
   `milestone_name` varchar(255) NOT NULL,
@@ -689,7 +689,7 @@ CREATE TABLE `research_progress` (
 -- Table structure for table `reviews`
 --
 
-CREATE TABLE `reviews` (
+CREATE TABLE IF NOT EXISTS `reviews` (
   `id` int(11) NOT NULL,
   `reviewer_id` int(11) NOT NULL,
   `reviewer_email` varchar(255) DEFAULT NULL,
@@ -733,7 +733,7 @@ INSERT INTO `reviews` (`id`, `reviewer_id`, `reviewer_email`, `proposal_id`, `st
 -- Table structure for table `users`
 --
 
-CREATE TABLE `users` (
+CREATE TABLE IF NOT EXISTS `users` (
   `id` int(10) UNSIGNED NOT NULL,
   `name` varchar(255) NOT NULL,
   `email` varchar(255) NOT NULL,
