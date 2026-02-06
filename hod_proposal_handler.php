@@ -299,7 +299,17 @@ else {
                 $approved_budget = floatval($prow['approved_budget']);
             }
 
-            echo json_encode(['success' => true, 'rubric' => $rubric, 'approved_budget' => $approved_budget]);
+            // Get annotated proposal file from reviewer
+            $annotated_file = null;
+            $astmt = $conn->prepare("SELECT annotated_file FROM reviews WHERE proposal_id = ? ORDER BY review_date DESC LIMIT 1");
+            $astmt->bind_param("i", $proposal_id);
+            $astmt->execute();
+            $ares = $astmt->get_result();
+            if ($ares && ($arow = $ares->fetch_assoc())) {
+                $annotated_file = $arow['annotated_file'];
+            }
+
+            echo json_encode(['success' => true, 'rubric' => $rubric, 'approved_budget' => $approved_budget, 'annotated_proposal_file' => $annotated_file]);
         } catch (Exception $e) {
             echo json_encode(['success' => false, 'message' => 'Error: ' . $e->getMessage()]);
         }

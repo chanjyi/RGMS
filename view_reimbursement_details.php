@@ -94,12 +94,12 @@ while ($row = $expenditures_result->fetch_assoc()) {
         .budget-summary-table tr.total-row td { border-top: 2px solid #27ae60; border-bottom: 2px solid #27ae60; }
         .expenditure-table { width: 100%; border-collapse: collapse; }
         .expenditure-table th, .expenditure-table td { padding: 12px; border-bottom: 1px solid #ddd; }
-        .expenditure-table th { background: #3498db; color: white; font-weight: 600; text-align: left; }
+        .expenditure-table th { background: #3C5B6F; color: white; font-weight: 600; text-align: left; }
         .expenditure-table td:nth-child(2) { white-space: normal; min-width: 200px; }
         .expenditure-table tr:hover { background: #f8f9fa; }
         .expenditure-table td.amount { text-align: right; font-weight: 600; color: #2c3e50; }
         .receipt-btn { padding: 6px 10px; background: #95a5a6; color: white; text-decoration: none; border-radius: 4px; font-size: 12px; font-weight: 600; display: inline-block; white-space: nowrap; }
-        .section-title { font-size: 18px; font-weight: 600; color: #2c3e50; margin: 25px 0 15px; padding-left: 10px; border-left: 4px solid #3498db; }
+        .section-title { font-size: 18px; font-weight: 600; color: #2c3e50; margin: 25px 0 15px; padding-left: 10px; border-left: 4px solid #3C5B6F; }
     </style>
 </head>
 <body>
@@ -200,7 +200,7 @@ while ($row = $expenditures_result->fetch_assoc()) {
                     <tbody>
                         <?php foreach ($expenditures_list as $exp): ?>
                             <tr>
-                                <td><span style="padding: 4px 8px; background: #3498db; color: white; border-radius: 4px; font-size: 12px; font-weight: 600;"><?= htmlspecialchars($exp['category']) ?></span></td>
+                                <td><span style="padding: 4px 8px; background: #3C5B6F; color: white; border-radius: 4px; font-size: 12px; font-weight: 600;"><?= htmlspecialchars($exp['category']) ?></span></td>
                                 <td><?= htmlspecialchars($exp['description']) ?></td>
                                 <td><?= date('M d, Y', strtotime($exp['transaction_date'])) ?></td>
                                 <td class="amount" style="font-weight: 700; color: #27ae60;">RM<?= number_format($exp['amount'], 2) ?></td>

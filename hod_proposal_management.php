@@ -535,6 +535,11 @@ $appeals = $appeals_stmt->get_result();
             <!-- Notes -->
             <div class="rubric-notes">
                 <label class="rubric-notes-label">Reviewer Feedback</label>
+                <div id="annotatedProposalLink" style="margin-bottom: 10px; display: none;">
+                    <a href="#" id="viewAnnotatedProposalBtn" target="_blank" style="color: #3C5B6F; text-decoration: underline; font-size: 13px; font-weight: 600; cursor: pointer;">
+                        Click to view the annotated proposal
+                    </a>
+                </div>
                 <textarea class="rubric-notes-text readonly-field" id="reviewerFeedback" readonly></textarea>
             </div>
 
@@ -1182,6 +1187,16 @@ $appeals = $appeals_stmt->get_result();
                     if (typeof data.approved_budget === 'number') {
                         document.getElementById('approvedBudget').value = data.approved_budget;
                         budgetAdjustments[proposalId] = data.approved_budget;
+                    }
+                    
+                    // Load annotated proposal link if available
+                    const annotatedLink = document.getElementById('annotatedProposalLink');
+                    const viewAnnotatedBtn = document.getElementById('viewAnnotatedProposalBtn');
+                    if (data.annotated_proposal_file) {
+                        viewAnnotatedBtn.href = data.annotated_proposal_file;
+                        annotatedLink.style.display = 'block';
+                    } else {
+                        annotatedLink.style.display = 'none';
                     }
                 }
             })

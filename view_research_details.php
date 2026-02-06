@@ -108,6 +108,29 @@ if (isset($_POST['update_health_status'])) {
     }
 }
 
+// Handle mark as complete
+if (isset($_POST['mark_complete'])) {
+    $stmt = $conn->prepare("UPDATE proposals SET health_status = 'COMPLETED' WHERE id = ?");
+    $stmt->bind_param("i", $proposal_id);
+    
+    if ($stmt->execute()) {
+        // Notify researcher
+        $prop_query = $conn->prepare("SELECT researcher_email, title FROM proposals WHERE id = ?");
+        $prop_query->bind_param("i", $proposal_id);
+        $prop_query->execute();
+        $prop_data = $prop_query->get_result()->fetch_assoc();
+        
+        $msg = "Congratulations! Your research project '{$prop_data['title']}' has been marked as COMPLETED by the HOD.";
+        $notif = $conn->prepare("INSERT INTO notifications (user_email, message, type) VALUES (?, ?, 'success')");
+        $notif->bind_param("ss", $prop_data['researcher_email'], $msg);
+        $notif->execute();
+        
+        $banner = ['type' => 'success', 'text' => 'Project marked as COMPLETED successfully.'];
+    } else {
+        $banner = ['type' => 'error', 'text' => 'Unable to mark project as complete. Please try again.'];
+    }
+}
+
 // Fetch detailed research information
 $proposal_sql = "
     SELECT 
@@ -128,7 +151,7 @@ if (!$proposal) {
 }
 
 // Fetch milestones
-$milestones_sql = "SELECT * FROM milestones WHERE grant_id = ? ORDER BY target_date ASC";
+$milestones_sql = "SELECT * FROM milestones WHERE grant_id = ? ORDER BY report_deadline ASC, created_at ASC";
 $stmt = $conn->prepare($milestones_sql);
 $stmt->bind_param("i", $proposal_id);
 $stmt->execute();
@@ -150,14 +173,14 @@ while ($row = $reports_result->fetch_assoc()) {
 }
 
 // Fetch pending extension requests for this proposal
-$extensions_sql = "SELECT er.id, er.report_id FROM extension_requests er JOIN progress_reports pr ON er.report_id = pr.id WHERE pr.proposal_id = ? AND er.status = 'PENDING'";
+$extensions_sql = "SELECT er.id, er.milestone_id FROM extension_requests er JOIN milestones m ON er.milestone_id = m.id WHERE m.grant_id = ? AND er.status = 'PENDING'";
 $stmt = $conn->prepare($extensions_sql);
 $stmt->bind_param("i", $proposal_id);
 $stmt->execute();
 $extensions_result = $stmt->get_result();
-$extensions_by_report = [];
+$extensions_by_milestone = [];
 while ($row = $extensions_result->fetch_assoc()) {
-    $extensions_by_report[$row['report_id']] = $row;
+    $extensions_by_milestone[$row['milestone_id']] = $row;
 }
 
 $reports_by_milestone = [];
@@ -245,8 +268,8 @@ if ($eligibility['total_milestones'] > 0 &&
     <style>
         body { font-family: Arial, sans-serif; padding: 30px; background: #f8f9fa; }
         .detail-card { background: white; padding: 25px; margin-bottom: 20px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-        .detail-header { font-size: 24px; font-weight: 700; color: #2c3e50; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 3px solid #3498db; }
-        .detail-header-bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 3px solid #3498db; }
+        .detail-header { font-size: 24px; font-weight: 700; color: #2c3e50; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 3px solid #3C5B6F; }
+        .detail-header-bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 3px solid #3C5B6F; }
         .detail-header-bar .detail-header { margin-bottom: 0; padding-bottom: 0; border-bottom: none; }
         .info-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin: 20px 0; }
         .info-item { padding: 12px; background: #f8f9fa; border-radius: 8px; }
@@ -294,19 +317,21 @@ if ($eligibility['total_milestones'] > 0 &&
 .report-header-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
         .report-header-left { flex: 1; }
         .report-actions { margin-top: 10px; display: flex; gap: 6px; flex-wrap: wrap; }
-        .btn-action { background: #3498db; color: white; padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; }
-        .btn-action:hover { background: #2980b9; }
+        .btn-action { background: #3C5B6F; color: white; padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; }
+        .btn-action:hover { background: #2C3E50; }
         .btn-action.approve { background: #27ae60; }
         .btn-action.approve:hover { background: #229954; }
         .btn-action.flag { background: #f39c12; }
-        .btn-action.flag:hover { background: #e67e\n        .health-option.completed { color: #27ae60; }\n        .health-option.completed.selected { background: #e8f5e9; }22; }
-        .btn-action.view-report { background: #3498db; }
-        .btn-action.view-report:hover { background: #2980b9; }
+        .btn-action.flag:hover { background: #e67e22; }
+        .btn-action.view-report { background: #3C5B6F; }
+        .btn-action.view-report:hover { background: #2C3E50; }
+        .btn-flag-report { background: #f39c12; color: white; padding: 10px 18px; border: none; border-radius: 5px; cursor: pointer; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
+        .btn-flag-report:hover { background: #e67e22; }
 .status-badge { padding: 4px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; display: inline-block; }
         .status-approved { background: #e8f5e9; color: #27ae60; border: 1px solid #c8e6c9; }
         .status-pending { background: #fff3e0; color: #f39c12; border: 1px solid #ffe0b2; }
         .status-followup { background: #ffebee; color: #e74c3c; border: 1px solid #ffcdd2; }
-        .extension-link { margin-top: 6px; display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; background: #fef5e7; color: #c26b00; border: 1px solid #f5c26b; border-radius: 10px; font-size: 11px; font-weight: 600; text-decoration: none; }
+        .extension-link { margin-top: 6px; display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; background: #fef5e7; color: #c26b00; border: 1px solid #f5c26b; border-radius: 10px; font-size: 11px; font-weight: 600; text-decoration: none; white-space: nowrap; width: fit-content; }
         .extension-link:hover { background: #fdebd0; }
         .leave-warning { background: #fff8e1; border: 1px solid #ffe0b2; color: #8a5a00; padding: 10px 12px; border-radius: 6px; font-size: 13px; margin: 10px 0 14px; }
         .health-dropdown-wrapper { position: relative; display: inline-block; }
@@ -324,7 +349,7 @@ if ($eligibility['total_milestones'] > 0 &&
         .health-option.delayed.selected { background: #ffebee; }
         .budget-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
         .budget-table th, .budget-table td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
-        .budget-table th { background: #3498db; color: white; font-weight: 600; }
+        .budget-table th { background: #3C5B6F; color: white; font-weight: 600; }
         .progress-bar { width: 100%; height: 25px; background: #e9ecef; border-radius: 15px; overflow: hidden; margin: 10px 0; }
         .progress-fill { height: 100%; background: linear-gradient(90deg, #28a745, #20c997); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 12px; }
     </style>
@@ -378,11 +403,13 @@ if ($eligibility['total_milestones'] > 0 &&
                         <div class="health-option delayed <?= ($proposal['health_status'] == 'DELAYED') ? 'selected' : '' ?>" onclick="selectHealth('DELAYED')">
                             <i class='bx bx-x-circle'></i> Delayed
                         </div>
-                        <?php if ($can_mark_complete): ?>
-                        <div class="health-option completed <?= ($proposal['health_status'] == 'COMPLETED') ? 'selected' : '' ?>" onclick="selectHealth('COMPLETED')">
+                        <div class="health-option completed <?= ($proposal['health_status'] == 'COMPLETED') ? 'selected' : '' ?>" 
+                             onclick="<?= ($can_mark_complete || $proposal['health_status'] == 'COMPLETED') ? "selectHealth('COMPLETED')" : "alert('Project must have all milestones completed and latest report approved to be marked as complete.')" ?>">
                             <i class='bx bx-check'></i> Completed
+                            <?php if (!$can_mark_complete && $proposal['health_status'] != 'COMPLETED'): ?>
+                                <span style="font-size: 10px; color: #999; margin-left: auto;">🔒</span>
+                            <?php endif; ?>
                         </div>
-                        <?php endif; ?>
                     </div>
                 </div>
                 <input type="hidden" name="health_status" id="health_status_input" value="<?= $proposal['health_status'] ?? 'ON_TRACK' ?>">
@@ -425,7 +452,7 @@ if ($eligibility['total_milestones'] > 0 &&
     </div>
 
     <div class="detail-card">
-        <div class="detail-header-bar" style="display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 3px solid #3498db;">
+        <div class="detail-header-bar" style="display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 3px solid #3C5B6F;">
             <div class="detail-header" style="margin: 0; padding: 0; border: none;">Budget Breakdown</div>
             <?php if ($pending_reimbursements > 0): ?>
                 <span class="extension-link" onclick="confirmLeave('hod_research_tracking.php?tab=pending-reimbursements')" style="cursor: pointer;">
@@ -488,9 +515,17 @@ if ($eligibility['total_milestones'] > 0 &&
                             <strong><?= htmlspecialchars($milestone['title']) ?></strong>
                             <p style="color: #7f8c8d; margin: 6px 0 4px;"><?= nl2br(htmlspecialchars($milestone['description'])) ?></p>
                             <div class="milestone-meta">
-                                <small>Target: <?= date('M d, Y', strtotime($milestone['target_date'])) ?></small>
+                                <small>
+                                    Deadline:
+                                    <?= $milestone['report_deadline'] ? date('M d, Y', strtotime($milestone['report_deadline'])) : 'No deadline' ?>
+                                </small>
                                 <span class="milestone-status <?= $status_class ?>"><?= $status_raw ?></span>
                             </div>
+                            <?php if (!empty($extensions_by_milestone[$milestone['id']])): ?>
+                                <a class="extension-link" href="hod_research_tracking.php?tab=pending-extensions" onclick="return confirmLeave('hod_research_tracking.php?tab=pending-extensions');" style="margin-top: 10px;">
+                                    <i class='bx bx-time'></i> Pending Extension Request
+                                </a>
+                            <?php endif; ?>
                             <?php if (!empty($reports_by_milestone[$milestone['id']])): ?>
                                 <?php foreach ($reports_by_milestone[$milestone['id']] as $report): ?>
                                     <div class="report-item">
@@ -506,11 +541,6 @@ if ($eligibility['total_milestones'] > 0 &&
                                                         <span class="status-badge <?= $report_status === 'APPROVED' ? 'status-approved' : 'status-followup' ?>" style="margin-top: 6px;">
                                                             <?= $report_status === 'APPROVED' ? 'APPROVED' : 'FOLLOW-UP REQUIRED' ?>
                                                         </span>
-                                                    <?php endif; ?>
-                                                    <?php if (!empty($extensions_by_report[$report['id']])): ?>
-                                                        <a class="extension-link" href="hod_research_tracking.php?tab=pending-extensions" onclick="return confirmLeave('hod_research_tracking.php?tab=pending-extensions');">
-                                                            <i class='bx bx-time'></i> Extension Request
-                                                        </a>
                                                     <?php endif; ?>
                                                 </div>
                                                 <i class='bx bx-chevron-down' style="font-size: 20px; color: #7f8c8d; flex-shrink: 0;"></i>
@@ -531,7 +561,7 @@ if ($eligibility['total_milestones'] > 0 &&
                                             </div>
 <div class="report-actions">
                                                 <a href="<?= htmlspecialchars($report['file_path']) ?>" target="_blank" class="btn-action view-report">
-                                                    <i class='bx bx-file-pdf'></i> View
+                                                    <i class='bx bx-show'></i> View
                                                 </a>
                                                 <?php 
                                                     $report_status = strtoupper($report['status'] ?? 'PENDING_REVIEW');

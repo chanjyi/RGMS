@@ -326,7 +326,6 @@ CREATE TABLE `extension_requests` (
 --
 
 INSERT INTO `extension_requests` (`id`, `milestone_id`, `researcher_email`, `new_deadline`, `justification`, `status`, `requested_at`) VALUES
-(9, 0, 'researcher@gmail.com', '2026-02-21', 'dunno', 'PENDING', '2026-02-06 05:13:41'),
 (12, 13, 'researcher@gmail.com', '2026-02-16', 'no', 'PENDING', '2026-02-06 08:47:06'),
 (13, 14, 'researcher@gmail.com', '2026-02-14', '1', 'PENDING', '2026-02-06 08:48:49'),
 (14, 16, 'researcher@gmail.com', '2026-02-14', '2', 'PENDING', '2026-02-06 09:14:49'),

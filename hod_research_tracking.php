@@ -52,23 +52,26 @@ if (isset($_POST['extension_decision'])) {
     $decision = $_POST['decision']; // APPROVED or REJECTED
     $hod_remarks = mysqli_real_escape_string($conn, $_POST['hod_remarks'] ?? '');
     
-    $stmt = $conn->prepare("UPDATE extension_requests SET status = ?, reviewed_at = NOW() WHERE id = ?");
+    $stmt = $conn->prepare("UPDATE extension_requests SET status = ? WHERE id = ?");
     $stmt->bind_param("si", $decision, $extension_id);
     
     if ($stmt->execute()) {
         // Get extension details
-        $ext_query = $conn->prepare("SELECT er.*, pr.title, pr.proposal_id FROM extension_requests er 
-                                     JOIN progress_reports pr ON er.report_id = pr.id WHERE er.id = ?");
+        $ext_query = $conn->prepare("SELECT er.*, m.title AS milestone_title, m.grant_id AS proposal_id
+                         FROM extension_requests er
+                         JOIN milestones m ON er.milestone_id = m.id
+                         WHERE er.id = ?");
         $ext_query->bind_param("i", $extension_id);
         $ext_query->execute();
         $ext_data = $ext_query->get_result()->fetch_assoc();
         
         // Update progress report deadline if approved
         if ($decision === 'APPROVED') {
-            $conn->prepare("UPDATE progress_reports SET deadline = ? WHERE id = ?")->execute([$ext_data['new_deadline'], $ext_data['report_id']]);
-            $msg = "Extension request APPROVED for '{$ext_data['title']}'. New deadline: {$ext_data['new_deadline']}";
+            $conn->prepare("UPDATE milestones SET report_deadline = ? WHERE id = ?")
+                ->execute([$ext_data['new_deadline'], $ext_data['milestone_id']]);
+            $msg = "Extension request APPROVED for milestone '{$ext_data['milestone_title']}'. New deadline: {$ext_data['new_deadline']}";
         } else {
-            $msg = "Extension request REJECTED for '{$ext_data['title']}'. Remarks: $hod_remarks";
+            $msg = "Extension request REJECTED for milestone '{$ext_data['milestone_title']}'. Remarks: $hod_remarks";
         }
         
         $notif = $conn->prepare("INSERT INTO notifications (user_email, message, type) VALUES (?, ?, ?)");
@@ -209,9 +212,9 @@ $active_research_sql = "
         COUNT(DISTINCT m.id) AS total_milestones,
         COUNT(DISTINCT CASE WHEN UPPER(TRIM(m.status)) = 'COMPLETED' THEN m.id END) AS completed_milestones,
         MAX(pr.submitted_at) AS last_report_date,
-        (SELECT COUNT(*) FROM extension_requests er 
-         JOIN progress_reports pr2 ON er.report_id = pr2.id 
-         WHERE pr2.proposal_id = p.id AND er.status = 'PENDING') AS pending_extensions,
+        (SELECT COUNT(*) FROM extension_requests er
+         JOIN milestones m2 ON er.milestone_id = m2.id
+         WHERE m2.grant_id = p.id AND er.status = 'PENDING') AS pending_extensions,
         (SELECT COUNT(*) FROM reimbursement_requests rr 
          WHERE rr.grant_id = p.id AND rr.status = 'PENDING') AS pending_reimbursements
     FROM proposals p
@@ -224,7 +227,7 @@ $active_research_sql = "
 ";;
 $active_research = $conn->query($active_research_sql);
 
-// Completed/Archived Research Projects (health_status = COMPLETED)
+// Completed/Archived Research Projects (health_status = COMPLETED or ARCHIVED)
 $completed_research_sql = "
     SELECT 
         p.id,
@@ -244,9 +247,9 @@ $completed_research_sql = "
     LEFT JOIN users u ON p.researcher_email = u.email
     LEFT JOIN progress_reports pr ON p.id = pr.proposal_id
     LEFT JOIN milestones m ON p.id = m.grant_id
-    WHERE p.health_status = 'COMPLETED'
+    WHERE p.health_status IN ('COMPLETED', 'ARCHIVED')
     GROUP BY p.id
-    ORDER BY p.approved_at DESC
+    ORDER BY CASE WHEN p.health_status = 'COMPLETED' THEN 0 ELSE 1 END, p.approved_at DESC
 ";
 $completed_research = $conn->query($completed_research_sql);
 
@@ -269,13 +272,13 @@ $pending_reports = $conn->query($pending_reports_sql);
 $pending_extensions_sql = "
     SELECT 
         er.*,
-        pr.title AS report_title,
-        pr.deadline AS current_deadline,
+        m.title AS milestone_title,
+        m.report_deadline AS current_deadline,
         p.title AS proposal_title,
         p.id AS proposal_id
     FROM extension_requests er
-    JOIN progress_reports pr ON er.report_id = pr.id
-    JOIN proposals p ON pr.proposal_id = p.id
+    JOIN milestones m ON er.milestone_id = m.id
+    JOIN proposals p ON m.grant_id = p.id
     WHERE er.status = 'PENDING'
     ORDER BY er.requested_at DESC
 ";
@@ -344,7 +347,7 @@ $pending_reimbursements = $conn->query($pending_reimbursements_sql);
             background: #f8f9fa;
             padding: 12px;
             border-radius: 8px;
-            border-left: 4px solid #3498db;
+            border-left: 4px solid #3C5B6F;
         }
         .stat-label {
             font-size: 12px;
@@ -396,8 +399,8 @@ $pending_reimbursements = $conn->query($pending_reimbursements_sql);
             color: #e74c3c;
         }
         .badge-info {
-            background: #e3f2fd;
-            color: #3498db;
+            background: #D9E8F5;
+            color: #3C5B6F;
         }
         .badge-secondary {
             background: #f5f5f5;
@@ -424,11 +427,11 @@ $pending_reimbursements = $conn->query($pending_reimbursements_sql);
             transition: all 0.2s;
         }
         .btn-view {
-            background: #3498db;
+            background: #3C5B6F;
             color: white;
         }
         .btn-view:hover {
-            background: #2980b9;
+            background: #2C3E50;
         }
         .btn-flag {
             background: #e74c3c;
@@ -561,7 +564,7 @@ $pending_reimbursements = $conn->query($pending_reimbursements_sql);
         .milestone-item {
             padding: 10px;
             background: #f8f9fa;
-            border-left: 4px solid #3498db;
+            border-left: 4px solid #3C5B6F;
             margin-bottom: 8px;
             border-radius: 4px;
         }
@@ -725,7 +728,7 @@ $pending_reimbursements = $conn->query($pending_reimbursements_sql);
                                 <div class="progress-title">Extension Request</div>
                                 <div class="progress-researcher">
                                     Project: <?= htmlspecialchars($extension['proposal_title']) ?><br>
-                                    Report: <?= htmlspecialchars($extension['report_title']) ?>
+                                    Milestone: <?= htmlspecialchars($extension['milestone_title']) ?>
                                 </div>
                             </div>
                             <div>
@@ -849,8 +852,13 @@ $pending_reimbursements = $conn->query($pending_reimbursements_sql);
                                 </div>
                             </div>
                             <div>
-                                <span class="badge" style="background: #95a5a6; color: white;">
-                                    <?= $project['status'] ?>
+                                <?php 
+                                    $health = $project['health_status'] ?? 'COMPLETED';
+                                    $health_badge_class = ($health === 'ARCHIVED') ? 'badge-secondary' : 'badge-info';
+                                    $health_icon = ($health === 'ARCHIVED') ? 'bx-archive' : 'bx-check-circle';
+                                ?>
+                                <span class="badge <?= $health_badge_class ?>">
+                                    <i class='bx <?= $health_icon ?>'></i> <?= $health ?>
                                 </span>
                             </div>
                         </div>
@@ -877,10 +885,10 @@ $pending_reimbursements = $conn->query($pending_reimbursements_sql);
                         </div>
 
                         <div class="action-btns">
-                            <button class="btn-action btn-view" onclick="viewCompletedResearch(<?= $project['id'] ?>)">
-                                <i class='bx bx-show'></i> View Final Output
+                            <button class="btn-action btn-view" onclick="viewResearchDetails(<?= $project['id'] ?>)">
+                                <i class='bx bx-show'></i> View Details
                             </button>
-                            <?php if ($project['status'] !== 'ARCHIVED'): ?>
+                            <?php if ($project['health_status'] !== 'ARCHIVED'): ?>
                                 <button class="btn-action" style="background: #95a5a6; color: white;" onclick="archiveResearch(<?= $project['id'] ?>)">
                                     <i class='bx bx-archive'></i> Archive
                                 </button>

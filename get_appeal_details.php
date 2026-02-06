@@ -121,13 +121,17 @@ $rev_history = $history_stmt->get_result();
                     <div class="evaluation-block">
                         <div class="eval-label">Reviewer Decision (<?= htmlspecialchars($rev['review_type']) ?>)</div>
                         <p class="eval-meta">By <?= htmlspecialchars($rev['reviewer_name'] ?? 'Reviewer') ?> • <?= htmlspecialchars($rev['decision'] ?? 'N/A') ?></p>
+                        <?php if (!empty($rev['annotated_file'])): ?>
+                            <div style="margin-bottom: 10px;">
+                                <a href="<?= htmlspecialchars($rev['annotated_file']) ?>" target="_blank" style="color: #3C5B6F; text-decoration: underline; font-size: 13px; font-weight: 600; cursor: pointer;">
+                                    Click to view the annotated proposal
+                                </a>
+                            </div>
+                        <?php endif; ?>
                         <?php if (!empty($rev['feedback'])): ?>
                             <p class="eval-text"><?= nl2br(htmlspecialchars($rev['feedback'])) ?></p>
                         <?php else: ?>
                             <p class="eval-text">No written feedback provided.</p>
-                        <?php endif; ?>
-                        <?php if (!empty($rev['annotated_file'])): ?>
-                            <a class="eval-link" href="<?= htmlspecialchars($rev['annotated_file']) ?>" target="_blank">View annotated file</a>
                         <?php endif; ?>
                     </div>
                 <?php endwhile; ?>
