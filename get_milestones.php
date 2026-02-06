@@ -32,11 +32,11 @@ if ($verify_result->num_rows === 0) {
 }
 
 // Fetch milestones for this grant
-$milestones_query = "SELECT id, title, description, target_date, report_deadline, status 
+$milestones_query = "SELECT id, title, description, report_deadline, status 
                      FROM milestones 
                      WHERE grant_id = ? 
-                     ORDER BY target_date ASC";
-                     
+                     ORDER BY report_deadline ASC";
+                      
 $m_stmt = $conn->prepare($milestones_query);
 $m_stmt->bind_param("i", $grant_id);
 $m_stmt->execute();
@@ -48,7 +48,7 @@ while ($milestone = $m_result->fetch_assoc()) {
         'id' => $milestone['id'],
         'title' => $milestone['title'],
         'description' => $milestone['description'],
-        'target_date' => $milestone['target_date'],
+        // REMOVED 'target_date' => $milestone['target_date'],
         'report_deadline' => $milestone['report_deadline'],
         'status' => $milestone['status']
     ];

@@ -86,15 +86,18 @@ if (isset($_POST['submit_proposal'])) {
                 // Capture milestone inputs
                 $milestone_titles = $_POST['milestone_title'] ?? [];
                 $milestone_descs = $_POST['milestone_desc'] ?? [];
-                $milestone_dates = $_POST['milestone_date'] ?? [];
                 $milestone_deadlines = $_POST['milestone_deadline'] ?? [];
 
                 // Insert milestones with deadlines
                 for ($i = 0; $i < count($milestone_titles); $i++) {
-                    if (!empty($milestone_titles[$i]) && !empty($milestone_dates[$i])) {
-                        $m_stmt = $conn->prepare("INSERT INTO milestones (grant_id, title, description, target_date, report_deadline, status) VALUES (?, ?, ?, ?, ?, 'PENDING')");
-                        $deadline = !empty($milestone_deadlines[$i]) ? $milestone_deadlines[$i] : NULL;
-                        $m_stmt->bind_param("issss", $proposal_id, $milestone_titles[$i], $milestone_descs[$i], $milestone_dates[$i], $deadline);
+                    // Check if title and deadline are provided (instead of target_date)
+                    if (!empty($milestone_titles[$i]) && !empty($milestone_deadlines[$i])) {
+                        $m_stmt = $conn->prepare("INSERT INTO milestones (grant_id, title, description, report_deadline, status) VALUES (?, ?, ?, ?, 'PENDING')");
+                        
+                        $deadline = $milestone_deadlines[$i]; // Direct assignment since it is required now
+                        
+                        // Updated bind_param: "isss" (integer, string, string, string)
+                        $m_stmt->bind_param("isss", $proposal_id, $milestone_titles[$i], $milestone_descs[$i], $deadline);
                         $m_stmt->execute();
                     }
                 }
@@ -282,7 +285,6 @@ if (isset($_POST['submit_report'])) {
     $rep_title = mysqli_real_escape_string($conn, $_POST['report_title']);
     $achievements = mysqli_real_escape_string($conn, $_POST['achievements']);
     $challenges = mysqli_real_escape_string($conn, $_POST['challenges']);
-    $deadline = $_POST['report_deadline'];
     $milestone_ids = $_POST['milestones'] ?? [];
     
     $target_dir = "uploads/reports/";
@@ -297,16 +299,9 @@ if (isset($_POST['submit_report'])) {
         $message = "Error: Only PDF files allowed for evidence."; 
         $messageType = "error";
     } else {
-        $submission_date = date('Y-m-d');
-        
-        if (strtotime($submission_date) > strtotime($deadline)) {
-            $message = "Warning: Report submitted past deadline. Extension may be required."; 
-            $messageType = "error";
-        }
-        
         if (move_uploaded_file($_FILES["report_file"]["tmp_name"], $target_file)) {
-            $stmt = $conn->prepare("INSERT INTO progress_reports (proposal_id, researcher_email, title, achievements, challenges, file_path, deadline, status, submitted_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'PENDING_REVIEW', NOW())");
-            $stmt->bind_param("issssss", $grant_id, $email, $rep_title, $achievements, $challenges, $target_file, $deadline);
+            $stmt = $conn->prepare("INSERT INTO progress_reports (proposal_id, researcher_email, title, achievements, challenges, file_path, status, submitted_at) VALUES (?, ?, ?, ?, ?, ?, 'PENDING_REVIEW', NOW())");
+            $stmt->bind_param("isssss", $grant_id, $email, $rep_title, $achievements, $challenges, $target_file);
             
             if ($stmt->execute()) {
                 // Mark selected milestones as completed
@@ -329,10 +324,10 @@ if (isset($_POST['submit_report'])) {
 }
 
 // =========================================================
-// USE CASE 12: REQUEST DEADLINE EXTENSION
+// USE CASE 12: REQUEST DEADLINE EXTENSION FOR MILESTONES
 // =========================================================
 if (isset($_POST['request_extension'])) {
-    $report_id = intval($_POST['report_id']);
+    $milestone_id = intval($_POST['milestone_id']);
     $new_date = $_POST['new_date'];
     $reason = mysqli_real_escape_string($conn, $_POST['justification']);
 
@@ -340,14 +335,14 @@ if (isset($_POST['request_extension'])) {
         $message = "New deadline must be a future date."; 
         $messageType = "error";
     } else {
-        $stmt = $conn->prepare("INSERT INTO extension_requests (report_id, researcher_email, new_deadline, justification, status, requested_at) VALUES (?, ?, ?, ?, 'PENDING', NOW())");
-        $stmt->bind_param("isss", $report_id, $email, $new_date, $reason);
+        $stmt = $conn->prepare("INSERT INTO extension_requests (milestone_id, researcher_email, new_deadline, justification, status, requested_at) VALUES (?, ?, ?, ?, 'PENDING', NOW())");
+        $stmt->bind_param("isss", $milestone_id, $email, $new_date, $reason);
         
         if ($stmt->execute()) {
-            notifySystem($conn, 'hod', "Deadline Extension Request: $email requests extension for Report #$report_id to $new_date. Reason: $reason");
+            notifySystem($conn, 'hod', "Deadline Extension Request: $email requests extension for Milestone #$milestone_id to $new_date. Reason: $reason");
             $message = "Extension request submitted to Head of Department for approval."; 
             $messageType = "success";
-            log_activity($conn, "CREATE", "EXTENSION_REQUEST", null, "Request Extension", "Researcher requested extension for report #$report_id to $new_date");
+            log_activity($conn, "CREATE", "EXTENSION_REQUEST", null, "Request Extension", "Researcher requested extension for milestone #$milestone_id to $new_date");
         } else {
             $message = "Error submitting extension request."; 
             $messageType = "error";
@@ -509,10 +504,18 @@ if (isset($_POST['request_reimbursement'])) {
 // DATA FETCHING FOR DASHBOARD
 // =========================================================
 
-// Fetch proposals + Reviewer Annotations
-$sql_props = "SELECT p.*, r.decision as reviewer_decision, r.feedback, r.annotated_file 
+// Fetch proposals with LATEST reviewer feedback/annotation only
+$sql_props = "SELECT p.*, 
+              (SELECT r.decision FROM reviews r 
+               WHERE r.proposal_id = p.id 
+               ORDER BY r.review_date DESC, r.id DESC LIMIT 1) as reviewer_decision,
+              (SELECT r.feedback FROM reviews r 
+               WHERE r.proposal_id = p.id 
+               ORDER BY r.review_date DESC, r.id DESC LIMIT 1) as feedback,
+              (SELECT r.annotated_file FROM reviews r 
+               WHERE r.proposal_id = p.id 
+               ORDER BY r.review_date DESC, r.id DESC LIMIT 1) as annotated_file
               FROM proposals p 
-              LEFT JOIN reviews r ON p.id = r.proposal_id 
               WHERE p.researcher_email = ? 
               ORDER BY p.created_at DESC";
 $stmt = $conn->prepare($sql_props);
@@ -627,7 +630,7 @@ $my_reports = $stmt->get_result();
         .btn-appeal { background: #e74c3c; color: white; }
         .btn-action:hover { opacity: 0.8; transform: translateY(-1px); }
         
-        /* Budget increment buttons */
+        /* Budget increment buttons styled like HOD rubric modal */
         .budget-input-wrapper {
             display: flex;
             align-items: center;
@@ -642,15 +645,30 @@ $my_reports = $stmt->get_result();
             background: #3C5B6F;
             color: white;
             border: none;
-            padding: 10px 15px;
+            padding: 10px 12px;
             border-radius: 5px;
             cursor: pointer;
-            font-size: 14px;
+            font-size: 16px;
             transition: 0.3s;
+            min-width: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
         
         .budget-increment-btn:hover {
             background: #2c4555;
+        }
+        
+        .budget-increment-btn:active {
+            transform: scale(0.95);
+        }
+        
+        /* Read-only field styling like HOD rubric modal */
+        .readonly-field {
+            background-color: #f5f5f5 !important;
+            cursor: not-allowed;
+            color: #666;
         }
     </style>
 </head>
@@ -716,7 +734,7 @@ $my_reports = $stmt->get_result();
                         </div>
                         <div class="input-group">
                             <label>Total Budget Requested (RM) *</label>
-                            <input type="number" name="budget_requested" step="0.01" min="0" required placeholder="0.00" id="totalBudget" readonly>
+                            <input type="number" name="budget_requested" step="0.01" min="0" required placeholder="0.00" id="totalBudget" class="readonly-field" readonly title="This value is automatically calculated from budget breakdown below">
                         </div>
                     </div>
                     
@@ -726,21 +744,27 @@ $my_reports = $stmt->get_result();
                             <label>Equipment (RM)</label>
                             <div class="budget-input-wrapper">
                                 <input type="number" name="budget_equipment" step="0.01" min="0" value="0" class="budget-category" onchange="calculateTotal()">
-                                <button type="button" class="budget-increment-btn" onclick="incrementBudget('budget_equipment')">+100</button>
+                                <button type="button" class="budget-increment-btn" onclick="incrementBudget('budget_equipment', 100)" title="Add RM100">
+                                    <i class='bx bx-up-arrow-alt'></i>
+                                </button>
                             </div>
                         </div>
                         <div class="input-group">
                             <label>Materials (RM)</label>
                             <div class="budget-input-wrapper">
                                 <input type="number" name="budget_materials" step="0.01" min="0" value="0" class="budget-category" onchange="calculateTotal()">
-                                <button type="button" class="budget-increment-btn" onclick="incrementBudget('budget_materials')">+100</button>
+                                <button type="button" class="budget-increment-btn" onclick="incrementBudget('budget_materials', 100)" title="Add RM100">
+                                    <i class='bx bx-up-arrow-alt'></i>
+                                </button>
                             </div>
                         </div>
                         <div class="input-group">
                             <label>Travel (RM)</label>
                             <div class="budget-input-wrapper">
                                 <input type="number" name="budget_travel" step="0.01" min="0" value="0" class="budget-category" onchange="calculateTotal()">
-                                <button type="button" class="budget-increment-btn" onclick="incrementBudget('budget_travel')">+100</button>
+                                <button type="button" class="budget-increment-btn" onclick="incrementBudget('budget_travel', 100)" title="Add RM100">
+                                    <i class='bx bx-up-arrow-alt'></i>
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -749,14 +773,18 @@ $my_reports = $stmt->get_result();
                             <label>Personnel (RM)</label>
                             <div class="budget-input-wrapper">
                                 <input type="number" name="budget_personnel" step="0.01" min="0" value="0" class="budget-category" onchange="calculateTotal()">
-                                <button type="button" class="budget-increment-btn" onclick="incrementBudget('budget_personnel')">+100</button>
+                                <button type="button" class="budget-increment-btn" onclick="incrementBudget('budget_personnel', 100)" title="Add RM100">
+                                    <i class='bx bx-up-arrow-alt'></i>
+                                </button>
                             </div>
                         </div>
                         <div class="input-group">
                             <label>Other Expenses (RM)</label>
                             <div class="budget-input-wrapper">
                                 <input type="number" name="budget_other" step="0.01" min="0" value="0" class="budget-category" onchange="calculateTotal()">
-                                <button type="button" class="budget-increment-btn" onclick="incrementBudget('budget_other')">+100</button>
+                                <button type="button" class="budget-increment-btn" onclick="incrementBudget('budget_other', 100)" title="Add RM100">
+                                    <i class='bx bx-up-arrow-alt'></i>
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -776,12 +804,8 @@ $my_reports = $stmt->get_result();
                             </div>
                             <div class="grid-2">
                                 <div class="input-group" style="margin-bottom: 0;">
-                                    <label>Target Date *</label>
-                                    <input type="date" name="milestone_date[]" required>
-                                </div>
-                                <div class="input-group" style="margin-bottom: 0;">
-                                    <label>Progress Report Deadline</label>
-                                    <input type="date" name="milestone_deadline[]" placeholder="Optional">
+                                    <label>Milestone Deadline *</label>
+                                    <input type="date" name="milestone_deadline[]" required title="Deadline for completing this milestone">
                                 </div>
                             </div>
                         </div>
@@ -810,7 +834,6 @@ $my_reports = $stmt->get_result();
             <table class="styled-table">
                 <thead>
                     <tr>
-                        <th>ID</th>
                         <th>Title</th>
                         <th>Status</th>
                         <th>Budget Requested</th>
@@ -822,7 +845,6 @@ $my_reports = $stmt->get_result();
                 <tbody>
                     <?php while($row = $my_props->fetch_assoc()): ?>
                         <tr>
-                            <td><?= $row['id'] ?></td>
                             <td style="max-width:250px;">
                                 <strong><?= htmlspecialchars($row['title']) ?></strong>
                                 <?php if($row['duration_months']): ?>
@@ -925,7 +947,7 @@ $my_reports = $stmt->get_result();
                             <i class='bx bx-file-blank'></i> <?= htmlspecialchars($grant['title']) ?>
                         </h4>
                         <p style="color:#666; font-size:13px; margin:5px 0;">
-                            Grant ID: #<?= $grant['id'] ?> | Approved: <?= date('M d, Y', strtotime($grant['approved_at'])) ?>
+                            Approved: <?= date('M d, Y', strtotime($grant['approved_at'])) ?>
                         </p>
                         
                         <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:15px; margin:15px 0;">
@@ -980,7 +1002,7 @@ $my_reports = $stmt->get_result();
                         <!-- MILESTONES -->
                         <h5 style="margin-top:20px; color:#3C5B6F;">Project Milestones</h5>
                         <?php
-                        $m_query = $conn->prepare("SELECT * FROM milestones WHERE grant_id = ? ORDER BY target_date");
+                        $m_query = $conn->prepare("SELECT * FROM milestones WHERE grant_id = ? ORDER BY report_deadline");
                         $m_query->bind_param("i", $grant['id']);
                         $m_query->execute();
                         $milestones = $m_query->get_result();
@@ -994,12 +1016,19 @@ $my_reports = $stmt->get_result();
                                         <span style="float:right; font-size:12px; padding:3px 8px; border-radius:10px; background:<?= $m['status']=='COMPLETED'?'#d4edda':'#fff3cd' ?>; color:<?= $m['status']=='COMPLETED'?'#155724':'#856404' ?>;">
                                             <?= $m['status'] ?>
                                         </span>
-                                        <br><small style="color:#666;">Due: <?= date('M d, Y', strtotime($m['target_date'])) ?></small>
+                                        
                                         <?php if ($m['description']): ?>
                                             <br><small style="color:#888;"><?= htmlspecialchars($m['description']) ?></small>
                                         <?php endif; ?>
                                         <?php if ($m['report_deadline']): ?>
-                                            <br><small style="color:#dc3545;"><i class='bx bx-calendar'></i> Report Deadline: <?= date('M d, Y', strtotime($m['report_deadline'])) ?></small>
+                                            <br><small style="color:#dc3545;"><i class='bx bx-calendar'></i> Deadline: <?= date('M d, Y', strtotime($m['report_deadline'])) ?></small>
+                                        <?php endif; ?>
+                                        <?php if ($m['status'] != 'COMPLETED'): ?>
+                                            <br>
+                                            <button onclick="openExtModal(<?= $m['id'] ?>, '<?= date('Y-m-d', strtotime($m['report_deadline'])) ?>')" 
+                                                    style="margin-top:5px; padding:4px 8px; background:#f39c12; color:white; border:none; border-radius:3px; cursor:pointer; font-size:11px;">
+                                                <i class='bx bx-time'></i> Request Extension
+                                            </button>
                                         <?php endif; ?>
                                     </div>
                                 <?php endwhile; ?>
@@ -1256,9 +1285,8 @@ $my_reports = $stmt->get_result();
                     <tr>
                         <th>Grant</th>
                         <th>Title</th>
-                        <th>Deadline</th>
                         <th>Status</th>
-                        <th>Actions</th>
+                        <th>Submitted</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -1266,9 +1294,8 @@ $my_reports = $stmt->get_result();
                     $my_reports->data_seek(0);
                     if($my_reports->num_rows > 0):
                         while($rep = $my_reports->fetch_assoc()): 
-                            $is_overdue = strtotime($rep['deadline']) < strtotime(date('Y-m-d')) && $rep['status'] == 'PENDING_REVIEW';
                     ?>
-                        <tr <?= $is_overdue ? 'style="background:#fff3cd;"' : '' ?>>
+                        <tr>
                             <td><?= htmlspecialchars($rep['grant_title']) ?></td>
                             <td>
                                 <?= htmlspecialchars($rep['title']) ?>
@@ -1277,36 +1304,28 @@ $my_reports = $stmt->get_result();
                                     <i class='bx bx-file'></i> View Report PDF
                                 </a>
                             </td>
-                            <td style="font-size:12px;">
-                                <?= date('M d, Y', strtotime($rep['deadline'])) ?>
-                                <?php if($is_overdue): ?>
-                                    <br><span style="color:#dc3545; font-weight:bold;">OVERDUE</span>
-                                <?php endif; ?>
-                            </td>
                             <td>
                                 <span class="status-badge <?= strtolower($rep['status']) ?>">
                                     <?= str_replace('_', ' ', $rep['status']) ?>
                                 </span>
                             </td>
-                            <td>
-                                <button onclick="openExtModal(<?= $rep['id'] ?>, '<?= date('Y-m-d', strtotime($rep['deadline'])) ?>')" class="btn-action" style="background:#f39c12; color:white;">
-                                    <i class='bx bx-time'></i> Request Extension
-                                </button>
+                            <td style="font-size:12px;">
+                                <?= date('M d, Y', strtotime($rep['submitted_at'])) ?>
                             </td>
                         </tr>
                     <?php endwhile; else: ?>
-                        <tr><td colspan="5" style="text-align:center; color:#999;">No reports submitted yet.</td></tr>
+                        <tr><td colspan="4" style="text-align:center; color:#999;">No reports submitted yet.</td></tr>
                     <?php endif; ?>
                 </tbody>
             </table>
 
             <h3 style="color:#3C5B6F; margin-top:40px;">
-                <i class='bx bx-calendar-event'></i> Extension Requests
+                <i class='bx bx-calendar-event'></i> Milestone Extension Requests
             </h3>
             <table class="styled-table">
                 <thead>
                     <tr>
-                        <th>Report</th>
+                        <th>Milestone</th>
                         <th>Original Deadline</th>
                         <th>Requested Deadline</th>
                         <th>Status</th>
@@ -1315,9 +1334,9 @@ $my_reports = $stmt->get_result();
                 <tbody>
                     <?php
                     $ext_query = $conn->prepare("
-                        SELECT er.*, pr.title as report_title, pr.deadline as original_deadline
+                        SELECT er.*, m.title as milestone_title, m.report_deadline as original_deadline
                         FROM extension_requests er 
-                        JOIN progress_reports pr ON er.report_id = pr.id 
+                        JOIN milestones m ON er.milestone_id = m.id 
                         WHERE er.researcher_email = ?
                         ORDER BY er.requested_at DESC
                     ");
@@ -1328,7 +1347,7 @@ $my_reports = $stmt->get_result();
                     if($extensions->num_rows > 0): 
                         while($ext = $extensions->fetch_assoc()): ?>
                         <tr>
-                            <td><?= htmlspecialchars($ext['report_title']) ?></td>
+                            <td><?= htmlspecialchars($ext['milestone_title']) ?></td>
                             <td style="font-size:12px; color:#dc3545;">
                                 <?= date('M d, Y', strtotime($ext['original_deadline'])) ?>
                             </td>
@@ -1464,10 +1483,6 @@ $my_reports = $stmt->get_result();
                 </div>
                 
                 <div class="input-group">
-                    <label>Report Deadline *</label>
-                    <input type="date" name="report_deadline" required>
-                </div>
-                <div class="input-group">
                     <label>Evidence of Work (PDF) *</label>
                     <input type="file" name="report_file" accept=".pdf" required>
                 </div>
@@ -1515,18 +1530,18 @@ $my_reports = $stmt->get_result();
         </div>
     </div>
 
-    <!-- MODAL: REQUEST DEADLINE EXTENSION -->
+    <!-- MODAL: REQUEST DEADLINE EXTENSION FOR MILESTONES -->
     <div id="extModal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeModal('extModal')">&times;</span>
             <h3 style="color:#f39c12; margin-top:0;">
-                <i class='bx bx-time-five'></i> Request Deadline Extension
+                <i class='bx bx-time-five'></i> Request Milestone Deadline Extension
             </h3>
             <p style="color:#666; font-size:14px;">
                 Original Deadline: <strong style="color:#dc3545;" id="original_deadline_display"></strong>
             </p>
             <form method="POST">
-                <input type="hidden" name="report_id" id="ext_report_id">
+                <input type="hidden" name="milestone_id" id="ext_milestone_id">
                 <div class="input-group">
                     <label>New Target Deadline *</label>
                     <input type="date" name="new_date" id="new_deadline_input" required min="<?= date('Y-m-d', strtotime('+1 day')) ?>">
@@ -1571,11 +1586,11 @@ $my_reports = $stmt->get_result();
             document.getElementById('totalBudget').value = total.toFixed(2);
         }
         
-        // ========== BUDGET INCREMENT BY RM100 ==========
-        function incrementBudget(fieldName) {
+        // ========== BUDGET INCREMENT WITH ARROW ICONS ==========
+        function incrementBudget(fieldName, amount) {
             var field = document.getElementsByName(fieldName)[0];
             var currentValue = parseFloat(field.value) || 0;
-            field.value = (currentValue + 100).toFixed(2);
+            field.value = (currentValue + amount).toFixed(2);
             calculateTotal();
         }
 
@@ -1594,15 +1609,10 @@ $my_reports = $stmt->get_result();
                     <label>Description</label>
                     <textarea name="milestone_desc[]" placeholder="Brief description of this milestone" rows="2"></textarea>
                 </div>
-                <div class="grid-2">
-                    <div class="input-group" style="margin-bottom: 0;">
-                        <label>Target Date *</label>
-                        <input type="date" name="milestone_date[]" required>
-                    </div>
-                    <div class="input-group" style="margin-bottom: 0;">
-                        <label>Progress Report Deadline</label>
-                        <input type="date" name="milestone_deadline[]" placeholder="Optional">
-                    </div>
+                
+                <div class="input-group" style="margin-bottom: 0;">
+                    <label>Milestone Deadline *</label>
+                    <input type="date" name="milestone_deadline[]" required title="Deadline for completing this milestone">
                 </div>
             `;
             container.appendChild(newMilestone);
@@ -1730,9 +1740,9 @@ $my_reports = $stmt->get_result();
             document.getElementById('exp_category_name').textContent = categoryName;
         }
 
-        function openExtModal(reportId, originalDeadline) {
+        function openExtModal(milestoneId, originalDeadline) {
             document.getElementById('extModal').style.display = "block";
-            document.getElementById('ext_report_id').value = reportId;
+            document.getElementById('ext_milestone_id').value = milestoneId;
             
             var date = new Date(originalDeadline);
             var formattedDate = date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
