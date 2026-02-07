@@ -33,7 +33,7 @@ if (isset($_POST['report_action'], $_POST['report_id'])) {
         $msg_type = "error";
         $message = "Report not found.";
     } else {
-        // adjust if your "target" is different
+        // adjust if target is different
         $target_email = $rep['researcher_email'];
 
         if ($action === 'mark_resolved') {
@@ -113,18 +113,20 @@ if (isset($_POST['report_action'], $_POST['report_id'])) {
     }
 }
 
-/* ========= Upload Helpers ========= */
+// Helper functions for file uploads
 function ensure_dir($path) {
     if (!is_dir($path)) {
         mkdir($path, 0777, true);
     }
 }
 
+// Sanitize filename
 function safe_filename($name) {
     $name = preg_replace('/[^a-zA-Z0-9._-]/', '_', $name);
     return $name ?: ("file_" . time());
 }
 
+// Process a group of uploaded files
 function process_upload_group($conn, $message_id, $files, $absUploadDir, $relUploadDir) {
     if (!isset($files['name']) || empty($files['name'][0])) return;
 
@@ -165,7 +167,7 @@ function process_upload_group($conn, $message_id, $files, $absUploadDir, $relUpl
     }
 }
 
-/* ========= Handle Send Message (with attachments) ========= */
+// Handle sending a message
 if (isset($_POST['send_message'], $_POST['report_id'])) {
     $report_id = (int)$_POST['report_id'];
     $chat_message = trim($_POST['chat_message'] ?? '');
@@ -203,10 +205,9 @@ if (isset($_POST['send_message'], $_POST['report_id'])) {
     }
 }
 
-/* ========= Fetch Reports ========= */
 $reports_q = $conn->query("SELECT * FROM misconduct_reports ORDER BY created_at DESC");
 
-/* ========= For Communication Tab ========= */
+// Load selected report and its messages
 $selected_report_id = (int)($_GET['report_id'] ?? 0);
 $selected_report = null;
 $chat_res = null;
@@ -555,6 +556,7 @@ document.addEventListener('contextmenu', function(e) {
   }
 });
 
+// update file count
 function updateFileCount() {
   const files =
     document.getElementById('fileInput').files.length +

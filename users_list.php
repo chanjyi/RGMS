@@ -209,6 +209,7 @@ $users_q = $conn->query("SELECT * FROM users ORDER BY id DESC");
 
 <script>
 
+// Tab functionality
 function openTab(evt, tabName) {
     var tabcontent = document.getElementsByClassName("tab-content");
     for (var i = 0; i < tabcontent.length; i++) {

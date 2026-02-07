@@ -240,7 +240,6 @@ $defaultTab = $_GET['tab'] ?? 'assignProposal';
 
     <hr style="border: 1px solid #3C5B6F; opacity: 0.3; margin-bottom: 18px;">
 
-    <!-- Alert -->
     <?php if (!empty($message)): ?>
         <div class="alert" style="background: <?= $bg_color ?>; color: <?= $text_color ?>; border: 1px solid <?= $border_color ?>; padding: 15px; margin-bottom: 20px; border-radius: 8px;">
             <?= htmlspecialchars($message) ?>

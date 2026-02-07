@@ -9,7 +9,7 @@ if (!isset($_SESSION['email']) || ($_SESSION['role'] ?? '') !== 'admin') {
 
 $dashboardLink = 'admin_page.php';
 
-/* -------- Filters -------- */
+// Fetch filter parameters
 $keyword  = trim($_GET['q'] ?? '');
 $actionF  = trim($_GET['action'] ?? '');
 $roleF    = trim($_GET['role'] ?? '');
@@ -23,7 +23,6 @@ if (!in_array($perPage, $allowedPerPage)) $perPage = 20;
 
 $offset = ($page - 1) * $perPage;
 
-/* -------- WHERE builder -------- */
 $where = [];
 $params = [];
 $types  = "";
@@ -62,7 +61,7 @@ if ($keyword !== "") {
 
 $whereSql = !empty($where) ? ("WHERE " . implode(" AND ", $where)) : "";
 
-/* -------- Count total -------- */
+//-------- Get total rows --------
 $countSql  = "SELECT COUNT(*) AS total FROM activity_logs $whereSql";
 $countStmt = $conn->prepare($countSql);
 if (!$countStmt) die("Prepare failed: " . $conn->error);
@@ -100,9 +99,10 @@ $logs = [];
 while ($row = $res->fetch_assoc()) $logs[] = $row;
 $dataStmt->close();
 
-/* -------- Helpers -------- */
+// Helper functions
 function h($v) { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
 
+// Returns CSS class for action badge
 function badgeClass($action){
     $action = strtoupper($action);
     $base = "badge";
@@ -116,6 +116,7 @@ function badgeClass($action){
     return $base;
 }
 
+// Builds query string with overrides
 function buildQuery(array $override = []){
     $q = $_GET;
     foreach($override as $k => $v){
