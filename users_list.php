@@ -28,7 +28,7 @@ $users_q = $conn->query("SELECT * FROM users ORDER BY id DESC");
         .tab-content { display: none; padding: 25px; border: 1px solid #ddd; margin-top: -1px; border-radius: 0 5px 5px 5px; background: white; }
         .tab-content.active { display: block; }
 
-        /* Table style (if you already have styled-table in style.css, you can remove this) */
+        /* Table style */
         .styled-table { width:100%; border-collapse: collapse; margin-top: 10px; }
         .styled-table th, .styled-table td { padding: 12px; border-bottom: 1px solid #e5e7eb; text-align:left; font-size: 14px; }
         .styled-table th { background: #f8f9fa; }
@@ -56,7 +56,7 @@ $users_q = $conn->query("SELECT * FROM users ORDER BY id DESC");
    
 
 
-    <!-- Tab Navigation (same pattern) -->
+    <!-- Tab Navigation  -->
     <div style="margin-bottom: 0;">
         <button class="tab-btn active" onclick="openTab(event, 'allUsers')">
             <i class='bx bx-user'></i> All Users
@@ -209,6 +209,7 @@ $users_q = $conn->query("SELECT * FROM users ORDER BY id DESC");
 
 <script>
 
+// Tab functionality
 function openTab(evt, tabName) {
     var tabcontent = document.getElementsByClassName("tab-content");
     for (var i = 0; i < tabcontent.length; i++) {

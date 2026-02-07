@@ -35,7 +35,7 @@ if (isset($_POST['register'])) {
     }
     $checkEmail->close();
 
-    // ✅ Admin auto-approved, others pending
+    // Admin auto-approved, others pending
     $status = (strtolower($role) === 'admin') ? 'APPROVED' : 'PENDING';
 
     // Insert new user
@@ -69,7 +69,7 @@ if (isset($_POST['login'])) {
         exit();
     }
 
-    // ✅ explicitly fetch status too
+    //explicitly fetch status too
     $stmt = $conn->prepare("SELECT id, name, email, password, role, status FROM users WHERE email = ?");
     $stmt->bind_param("s", $email);
     $stmt->execute();
@@ -83,7 +83,7 @@ if (isset($_POST['login'])) {
             $roleLower = strtolower($user['role'] ?? '');
             $status = strtoupper($user['status'] ?? 'PENDING');
 
-            // ✅ Only non-admin must be approved
+            // Only non-admin must be approved
             if ($roleLower !== 'admin' && $status !== 'APPROVED') {
                 $_SESSION['login_error'] = "Your account is not approved yet. Please wait for admin approval.";
                 $_SESSION['active_form'] = 'login';

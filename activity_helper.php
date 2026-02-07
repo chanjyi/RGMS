@@ -1,25 +1,17 @@
 <?php
-// activity_helper.php
-// Usage: require_once 'activity_helper.php'; then call log_activity($conn, ...);
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-/**
- * Insert an activity log row into activity_logs.
- *
- * Table columns (your screenshot):
- * id, actor_email, actor_role, ip_address, action, entity_type, entity_id,
- * label, description, created_at
- */
+// This function records user activities into the activity_logs table for audit purposes
 function log_activity(mysqli $conn, string $action, string $entity_type, ?int $entity_id = null, ?string $label = null, ?string $description = null): void
 {
-    // Actor info from session (fallbacks if missing)
+    // Get the current user's email and role from the session, or use 'unknown' if they're not available
     $actor_email = $_SESSION['email'] ?? 'unknown';
     $actor_role  = $_SESSION['role'] ?? 'unknown';
 
-    // Best effort IP capture (handles proxy)
+    // Attempt to capture the user's IP address, checking multiple sources to account for proxy servers
     $ip = null;
     if (!empty($_SERVER['HTTP_CLIENT_IP'])) {
         $ip = $_SERVER['HTTP_CLIENT_IP'];
@@ -29,18 +21,17 @@ function log_activity(mysqli $conn, string $action, string $entity_type, ?int $e
         $ip = $_SERVER['REMOTE_ADDR'];
     }
 
+    // Prepare the SQL statement to insert a new activity log record
     $sql = "INSERT INTO activity_logs
             (actor_email, actor_role, ip_address, action, entity_type, entity_id, label, description, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())";
 
     $stmt = $conn->prepare($sql);
     if (!$stmt) {
-        // Don’t kill the page — logging failure should not break system
         return;
     }
 
-    // Bind types: s s s s s i s s
-    // entity_id is int and can be null
+    // Bind the parameters to the prepared statement with their appropriate data types
     $stmt->bind_param(
         "sssssiss",
         $actor_email,
@@ -53,6 +44,7 @@ function log_activity(mysqli $conn, string $action, string $entity_type, ?int $e
         $description
     );
 
+    // Execute the query and close the statement
     $stmt->execute();
     $stmt->close();
 }

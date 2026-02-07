@@ -9,7 +9,7 @@ if (!isset($_SESSION['email']) || ($_SESSION['role'] ?? '') !== 'admin') {
 
 $dashboardLink = 'admin_page.php';
 
-/* -------- Filters -------- */
+
 $keyword  = trim($_GET['q'] ?? '');
 $actionF  = trim($_GET['action'] ?? '');
 $roleF    = trim($_GET['role'] ?? '');
@@ -23,7 +23,7 @@ if (!in_array($perPage, $allowedPerPage)) $perPage = 20;
 
 $offset = ($page - 1) * $perPage;
 
-/* -------- WHERE builder -------- */
+
 $where = [];
 $params = [];
 $types  = "";
@@ -62,7 +62,7 @@ if ($keyword !== "") {
 
 $whereSql = !empty($where) ? ("WHERE " . implode(" AND ", $where)) : "";
 
-/* -------- Count total -------- */
+
 $countSql  = "SELECT COUNT(*) AS total FROM activity_logs $whereSql";
 $countStmt = $conn->prepare($countSql);
 if (!$countStmt) die("Prepare failed: " . $conn->error);
@@ -78,7 +78,7 @@ if ($page > $totalPages) {
     $offset = ($page - 1) * $perPage;
 }
 
-/* -------- Fetch rows -------- */
+
 $dataSql = "SELECT * FROM activity_logs
             $whereSql
             ORDER BY created_at DESC, id DESC
@@ -100,9 +100,10 @@ $logs = [];
 while ($row = $res->fetch_assoc()) $logs[] = $row;
 $dataStmt->close();
 
-/* -------- Helpers -------- */
+// Helper functions
 function h($v) { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
 
+// Generate badge class based on action type
 function badgeClass($action){
     $action = strtoupper($action);
     $base = "badge";
@@ -116,6 +117,7 @@ function badgeClass($action){
     return $base;
 }
 
+// Build query string with overrides for pagination links
 function buildQuery(array $override = []){
     $q = $_GET;
     foreach($override as $k => $v){
@@ -433,6 +435,7 @@ function buildQuery(array $override = []){
 </section>
 
 <script>
+  // Tab functionality
 document.querySelectorAll(".tab-btn").forEach(btn => {
   btn.addEventListener("click", () => {
     const tabId = btn.dataset.tab;

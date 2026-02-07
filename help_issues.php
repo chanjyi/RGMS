@@ -27,7 +27,7 @@ if (isset($_POST['report_action'], $_POST['report_id'])) {
         $msg_type = "error";
         $message = "Report not found.";
     } else {
-        // adjust if your "target" is different
+        // adjust if target is different
         $target_email = $rep['researcher_email'];
 
         if ($action === 'mark_resolved') {

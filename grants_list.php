@@ -54,7 +54,7 @@ if ($sum_q && $sum_q->num_rows > 0) {
 
 
     <style>
-        /* Tabs (same pattern as your users_list.php) */
+        /* Tabs */
         .tab-btn { padding: 12px 24px; cursor: pointer; border: none; background: #eee; font-size:15px; margin-right:2px; border-radius:5px 5px 0 0; transition: 0.3s; }
         .tab-btn:hover { background: #ddd; }
         .tab-btn.active { background: #3C5B6F; color: white; }
@@ -269,12 +269,10 @@ function makeFancyDonut(canvasId, dataArr, titleText) {
         padding: { bottom: 10 }
     },
 
-    // ✅ REMOVE numbers on the pie
     datalabels: {
         display: false
     },
 
-    // Tooltip shows value + percentage (keep this)
     tooltip: {
         callbacks: {
         label: function(ctx){
@@ -297,7 +295,6 @@ makeFancyDonut('pieSpent', spentData, 'Spent Amount by Category');
 </script>
 
 
-<!-- sidebar toggle if you need -->
 <script src="script.js"></script>
 
 </body>
