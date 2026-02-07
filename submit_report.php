@@ -1,6 +1,7 @@
 <?php
 session_start();
 require 'config.php';
+require 'activity_helper.php';
 
 if (isset($_POST['submit_report'])) {
     
@@ -30,6 +31,7 @@ $reviewer_email = $_SESSION['email'];
             // 3. UPDATE REVIEW TABLE
             $update_rev = $conn->prepare("UPDATE reviews SET status = 'Reported', decision = 'REJECT', review_date = NOW() WHERE proposal_id = ? AND reviewer_id = ?");
             $update_rev->bind_param("ii", $proposal_id, $reviewer_id);
+            $update_rev->execute();
             
             if (!$update_rev->execute()) {
                 die("Error updating review status: " . $conn->error); // Debugging line
@@ -60,6 +62,17 @@ $reviewer_email = $_SESSION['email'];
             $notif_stmt->bind_param("ss", $admin_email, $msg);
             $notif_stmt->execute();
         }
+
+        // ✅ ACTIVITY LOG (after everything succeeded)
+        log_activity(
+            $conn,
+            "SUBMIT_MISCONDUCT_REPORT",
+            "MISCONDUCT_REPORT",
+            (int)$report_id,
+            "Submit Misconduct Report",
+            "Reviewer submitted misconduct report #$report_id for proposal #$proposal_id against $researcher_email. Category=$category. Proposal set to UNDER_INVESTIGATION and review marked REPORTED/REJECTED."
+        );
+
 
         echo "<script>alert('Report submitted. This case has been escalated to Admin.'); window.location.href='reviewer_page.php';</script>";
     } else {

@@ -2,6 +2,8 @@
 // Start the user session to track login status and user information
 session_start();
 require 'config.php';
+require 'activity_helper.php';
+
 
 // Verify that the user is logged in and has admin privileges, otherwise redirect to login
 if (!isset($_SESSION['email']) || ($_SESSION['role'] ?? '') !== 'admin') {
@@ -51,6 +53,17 @@ if (isset($_POST['assign_proposal'])) {
                 $notif->execute();
             }
 
+            log_activity(
+                $conn,
+                "ASSIGN_REVIEWER",                      // action
+                "PROPOSAL",                             // entity_type
+                (int)$prop_id,                          // entity_id (int)
+                "Assign Proposal",                      // label
+                "Assigned proposal #$prop_id ($proposal_title) to reviewer_id=$reviewer_id"
+            );
+
+
+
             header("Location: assign_new_proposal.php?success=proposal&tab=assignProposal");
             exit();
         } else {
@@ -97,6 +110,17 @@ if (isset($_POST['assign_appeal'])) {
                 $notif->bind_param("ss", $rev_email, $notif_msg);
                 $notif->execute();
             }
+
+            /log_activity(
+                $conn,
+                "ASSIGN_REVIEWER",                      // action
+                "APPEAL",                               // entity_type
+                (int)$prop_id,                          // entity_id (int)
+                "Assign Appeal Case",                   // label
+                "Assigned appeal case #$prop_id ($proposal_title) to reviewer_id=$reviewer_id"
+            );
+
+
 
             header("Location: assign_new_proposal.php?success=appeal&tab=assignAppeal");
             exit();
