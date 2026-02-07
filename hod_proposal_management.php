@@ -23,6 +23,7 @@ $proposal_query = "SELECT p.*,
                                                      u.name AS researcher_name,
                                                      COALESCE(pr.is_evaluated, 0) AS is_evaluated,
                                                      COALESCE(pr.total_score, 0) AS total_score,
+                                                     pr.weight_outcome, pr.weight_impact, pr.weight_alignment, pr.weight_funding,
                                                      (SELECT rr.feedback
                                                             FROM reviews rr
                                                          WHERE rr.proposal_id = p.id
@@ -33,7 +34,7 @@ $proposal_query = "SELECT p.*,
                                         FROM proposals p 
                                         LEFT JOIN users u ON p.researcher_email = u.email 
                                         LEFT JOIN (
-                                                SELECT proposal_id, is_evaluated, total_score
+                                                SELECT proposal_id, is_evaluated, total_score, weight_outcome, weight_impact, weight_alignment, weight_funding
                                                 FROM proposal_rubric
                                                 WHERE hod_id = ?
                                         ) pr ON p.id = pr.proposal_id
@@ -421,9 +422,9 @@ $appeals = $appeals_stmt->get_result();
                     </p>
                 </div>
             <?php else: ?>
-                <div class="card-container">
+                <div class="card-container" id="appealCardContainer">
                     <?php while ($row = $appeals->fetch_assoc()): ?>
-                        <div class="tier-item appeal-item-border">
+                        <div class="tier-item appeal-item-border" data-appeal-id="<?= (int)$row['appeal_id'] ?>">
                             <div class="tier-item-content">
                                 <div class="tier-item-title"><?= htmlspecialchars($row['title']) ?></div>
                                 <div class="tier-item-researcher"><?= htmlspecialchars($row['researcher_email']) ?></div>
@@ -569,6 +570,19 @@ $appeals = $appeals_stmt->get_result();
         </div>
     </div>
 
+    <!-- Confirm Modal -->
+    <div id="confirmModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-icon" id="confirmIcon">⚠</div>
+            <h3 class="modal-title" id="confirmTitle">Confirm</h3>
+            <p class="modal-message" id="confirmMessage">Are you sure?</p>
+            <div class="modal-buttons">
+                <button class="modal-btn" onclick="closeConfirmModal()">Cancel</button>
+                <button class="modal-btn primary" id="confirmOkBtn">Confirm</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         // Data storage
         let proposalsData = <?= json_encode($proposals) ?>;
@@ -592,6 +606,20 @@ $appeals = $appeals_stmt->get_result();
             restoreWeightages();
             // Check if any proposals are already evaluated
             hasEvaluatedProposals = proposalsData.some(p => p.is_evaluated === 1 || p.is_evaluated === '1');
+            
+            // Extract and attach stored weightages to proposals that have them
+            // This ensures percentage calculations remain consistent with original scoring
+            proposalsData.forEach(proposal => {
+                if (proposal.weight_outcome) {
+                    proposal.rubricWeightages = {
+                        outcome: parseFloat(proposal.weight_outcome) || 1.0,
+                        impact: parseFloat(proposal.weight_impact) || 1.0,
+                        alignment: parseFloat(proposal.weight_alignment) || 1.0,
+                        funding: parseFloat(proposal.weight_funding) || 1.0
+                    };
+                }
+            });
+            
             initializeProposals();
             // Keep evaluated proposals visible in the review list but also clone them into tiers
             autoDistributeEvaluatedProposals();
@@ -611,6 +639,17 @@ $appeals = $appeals_stmt->get_result();
             
             if (hasEvaluatedProposals) {
                 showAlert('Warning', 'Changing weightage after evaluating proposals will affect the scoring. Previously evaluated proposals will need to be re-distributed based on the new weighted scores.', 'warning');
+                // Apply the new weightages to evaluated proposals for immediate score updates
+                proposalsData.forEach(proposal => {
+                    if (proposal.is_evaluated === 1 || proposal.is_evaluated === '1') {
+                        proposal.rubricWeightages = {
+                            outcome: rubricWeightages.outcome,
+                            impact: rubricWeightages.impact,
+                            alignment: rubricWeightages.alignment,
+                            funding: rubricWeightages.funding
+                        };
+                    }
+                });
                 // Recalculate and redistribute
                 refreshProposalScores();
                 autoDistributeEvaluatedProposals();
@@ -780,12 +819,14 @@ $appeals = $appeals_stmt->get_result();
                 const proposal = proposalsData.find(p => p.id === proposalId);
                 
                 if (proposal) {
-                    // Calculate updated score percentage
+                    // Calculate updated score percentage using original weightages
+                    // If proposal has stored weightages from evaluation, use those; otherwise use current global weightages
+                    const weightages = proposal.rubricWeightages || rubricWeightages;
                     const maxPossibleScore = 
-                        5 * rubricWeightages.outcome +
-                        5 * rubricWeightages.impact +
-                        5 * rubricWeightages.alignment +
-                        5 * rubricWeightages.funding;
+                        5 * weightages.outcome +
+                        5 * weightages.impact +
+                        5 * weightages.alignment +
+                        5 * weightages.funding;
                     const score = Number(proposal.total_score) || 0;
                     const scorePercentage = maxPossibleScore > 0 ? ((score / maxPossibleScore) * 100).toFixed(1) : 0;
                     
@@ -866,12 +907,14 @@ $appeals = $appeals_stmt->get_result();
                 ? '<span class="priority-badge high">High Priority</span>'
                 : '<span class="priority-badge low">Standard</span>';
 
-            // Calculate score percentage
+            // Calculate score percentage using original weightages
+            // If proposal has stored weightages from evaluation, use those; otherwise use current global weightages
+            const weightages = proposal.rubricWeightages || rubricWeightages;
             const maxPossibleScore = 
-                5 * rubricWeightages.outcome +
-                5 * rubricWeightages.impact +
-                5 * rubricWeightages.alignment +
-                5 * rubricWeightages.funding;
+                5 * weightages.outcome +
+                5 * weightages.impact +
+                5 * weightages.alignment +
+                5 * weightages.funding;
             const score = Number(proposal.total_score) || 0;
             const scorePercentage = maxPossibleScore > 0 ? ((score / maxPossibleScore) * 100).toFixed(1) : 0;
             const scoreDisplay = proposal.is_evaluated === 1 || proposal.is_evaluated === '1' 
@@ -911,12 +954,14 @@ $appeals = $appeals_stmt->get_result();
             div.dataset.budget = proposal.budget_requested || 0;
             div.setAttribute('draggable', true);
 
-            // Calculate score percentage
+            // Calculate score percentage using original weightages
+            // If proposal has stored weightages from evaluation, use those; otherwise use current global weightages
+            const weightages = proposal.rubricWeightages || rubricWeightages;
             const maxPossibleScore = 
-                5 * rubricWeightages.outcome +
-                5 * rubricWeightages.impact +
-                5 * rubricWeightages.alignment +
-                5 * rubricWeightages.funding;
+                5 * weightages.outcome +
+                5 * weightages.impact +
+                5 * weightages.alignment +
+                5 * weightages.funding;
             const score = Number(proposal.total_score) || 0;
             const scorePercentage = maxPossibleScore > 0 ? ((score / maxPossibleScore) * 100).toFixed(1) : 0;
             const scoreDisplay = proposal.is_evaluated === 1 || proposal.is_evaluated === '1' 
@@ -1123,6 +1168,11 @@ $appeals = $appeals_stmt->get_result();
             formData.append('impact_score', scores.impact || 0);
             formData.append('alignment_score', scores.alignment || 0);
             formData.append('funding_score', scores.funding || 0);
+            // Send weightages to backend so it can calculate weighted total correctly
+            formData.append('weightage_outcome', rubricWeightages.outcome);
+            formData.append('weightage_impact', rubricWeightages.impact);
+            formData.append('weightage_alignment', rubricWeightages.alignment);
+            formData.append('weightage_funding', rubricWeightages.funding);
 
             fetch('hod_proposal_handler.php', {
                 method: 'POST',
@@ -1187,6 +1237,20 @@ $appeals = $appeals_stmt->get_result();
                     if (typeof data.approved_budget === 'number') {
                         document.getElementById('approvedBudget').value = data.approved_budget;
                         budgetAdjustments[proposalId] = data.approved_budget;
+                    }
+                    
+                    // If there are stored weightages, use them for this proposal's calculations
+                    // This ensures percentage calculations remain consistent even if current weightages changed
+                    const storedWeightages = {
+                        outcome: parseFloat(data.rubric.weight_outcome) || 1.0,
+                        impact: parseFloat(data.rubric.weight_impact) || 1.0,
+                        alignment: parseFloat(data.rubric.weight_alignment) || 1.0,
+                        funding: parseFloat(data.rubric.weight_funding) || 1.0
+                    };
+                    // Store weightages for this proposal to ensure consistent percentage calculations
+                    const proposal = proposalsData.find(p => p.id === proposalId);
+                    if (proposal) {
+                        proposal.rubricWeightages = storedWeightages;
                     }
                     
                     // Load annotated proposal link if available
@@ -1421,6 +1485,27 @@ $appeals = $appeals_stmt->get_result();
             document.getElementById('alertModal').classList.remove('show');
         }
 
+        // Confirm Modal
+        function showConfirmModal(title, message, onConfirm) {
+            const modal = document.getElementById('confirmModal');
+            const okBtn = document.getElementById('confirmOkBtn');
+            document.getElementById('confirmTitle').textContent = title;
+            document.getElementById('confirmMessage').textContent = message;
+            document.getElementById('confirmIcon').textContent = '⚠';
+            okBtn.onclick = () => {
+                closeConfirmModal();
+                onConfirm();
+            };
+            modal.classList.add('show');
+        }
+
+        function closeConfirmModal() {
+            const modal = document.getElementById('confirmModal');
+            if (modal) {
+                modal.classList.remove('show');
+            }
+        }
+
         // Utility Functions
         function escapeHtml(text) {
             const map = {
@@ -1463,22 +1548,28 @@ $appeals = $appeals_stmt->get_result();
         // ============ APPEAL CASES JAVASCRIPT ============
         function submitAppealDecision(proposalId, appealId, action) {
             console.log('Submit appeal decision called:', proposalId, appealId, action);
-            
+
             if (!proposalId || !appealId || !action) {
                 console.error('Missing parameters:', { proposalId, appealId, action });
-                alert('Error: Missing required parameters');
+                showAlert('Error', 'Missing required parameters', 'error');
                 return;
             }
-            
-            if (!confirm('Are you sure you want to ' + (action === 'approve' ? 'APPROVE this appeal' : 'UPHOLD the rejection') + '?')) {
-                return;
-            }
-            
+
+            const actionText = action === 'approve' ? 'APPROVE this appeal' : 'UPHOLD the rejection';
+            showConfirmModal('Confirm Appeal Decision', `Are you sure you want to ${actionText}?`, () => {
+                executeAppealDecision(proposalId, appealId, action);
+            });
+        }
+
+        function executeAppealDecision(proposalId, appealId, action) {
             const formData = new FormData();
             formData.append('proposal_id', proposalId);
             formData.append('appeal_id', appealId);
             formData.append('appeal_action', action);
-            
+
+            // Close appeal modal right after confirmation
+            closeAppealModal();
+
             console.log('Sending request to hod_proposal_management.php');
 
             fetch('hod_proposal_management.php', {
@@ -1491,13 +1582,45 @@ $appeals = $appeals_stmt->get_result();
             })
             .then(html => {
                 console.log('Response HTML length:', html.length);
-                // Reload the page to show updated state
-                window.location.href = 'hod_proposal_management.php#appeal-cases';
+                removeAppealCard(appealId);
+                showAlert('Success', action === 'approve' ? 'Appeal approved successfully.' : 'Appeal rejection upheld.', 'success');
+                setTimeout(() => {
+                    window.location.href = 'hod_proposal_management.php#appeal-cases';
+                }, 1500);
             })
             .catch(e => {
                 console.error('Fetch error:', e);
-                alert('Error processing appeal decision: ' + e.message);
+                showAlert('Error', 'Error processing appeal decision: ' + e.message, 'error');
             });
+        }
+
+        function removeAppealCard(appealId) {
+            const container = document.getElementById('appealCardContainer');
+            if (!container) return;
+
+            const card = container.querySelector(`[data-appeal-id="${appealId}"]`);
+            if (card) {
+                card.remove();
+            }
+
+            const remaining = container.querySelectorAll('.appeal-item-border').length;
+            if (remaining > 0) {
+                container.classList.remove('placeholder-centered');
+            }
+            if (remaining === 0) {
+                container.classList.add('placeholder-centered');
+                container.innerHTML = `
+                    <div class="page-placeholder">
+                        <div class="placeholder-icon">
+                            <i class='bx bx-message-square-dots'></i>
+                        </div>
+                        <h2 class="placeholder-title">No appeal cases pending</h2>
+                        <p class="placeholder-text">
+                            When researchers contest a rejection, their justifications and past evaluations will appear here for your review.
+                        </p>
+                    </div>
+                `;
+            }
         }
 
         function openAppealModal(proposalId, appealId) {
@@ -1546,6 +1669,10 @@ $appeals = $appeals_stmt->get_result();
             const modal = document.getElementById('appealModal');
             if (event.target === modal) {
                 modal.classList.remove('show');
+            }
+            const confirmModal = document.getElementById('confirmModal');
+            if (event.target === confirmModal) {
+                closeConfirmModal();
             }
         });
     </script>

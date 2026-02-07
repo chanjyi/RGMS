@@ -210,7 +210,29 @@ VALUES
 */
 
 -- -------------------------------------------------------------------------
--- 10. BACKUP RECOMMENDATIONS
+-- 10. ADD WEIGHTAGE COLUMNS & FIX DECIMAL TYPE FOR PROPOSAL_RUBRIC (Rubrics Score Fix)
+-- -------------------------------------------------------------------------
+-- This ensures that percentage calculations remain consistent even if
+-- weightages are changed after scoring, and total_score maintains decimal precision
+
+-- Add weightage columns to store the weightages used during scoring
+ALTER TABLE proposal_rubric
+ADD COLUMN IF NOT EXISTS weight_outcome DECIMAL(3,1) DEFAULT 1.0 
+COMMENT 'Outcome weightage used during scoring' AFTER is_evaluated,
+ADD COLUMN IF NOT EXISTS weight_impact DECIMAL(3,1) DEFAULT 1.0 
+COMMENT 'Impact weightage used during scoring' AFTER weight_outcome,
+ADD COLUMN IF NOT EXISTS weight_alignment DECIMAL(3,1) DEFAULT 1.0 
+COMMENT 'Alignment weightage used during scoring' AFTER weight_impact,
+ADD COLUMN IF NOT EXISTS weight_funding DECIMAL(3,1) DEFAULT 1.0 
+COMMENT 'Funding weightage used during scoring' AFTER weight_alignment;
+
+-- Fix total_score column to use DECIMAL instead of INT for precision
+ALTER TABLE proposal_rubric
+MODIFY COLUMN total_score DECIMAL(6,1) DEFAULT 0 
+COMMENT 'Weighted total score (can be decimal based on weightages)';
+
+-- -------------------------------------------------------------------------
+-- 11. BACKUP RECOMMENDATIONS
 -- -------------------------------------------------------------------------
 -- Before running these updates, create a backup:
 -- mysqldump -u root -p user_db > backup_$(date +%Y%m%d_%H%M%S).sql

@@ -171,6 +171,12 @@ elseif ($action === 'save_rubric') {
         $funding = intval($_POST['funding_score'] ?? 0);
         $hod_notes = $_POST['hod_notes'] ?? '';
         $approved_budget = floatval($_POST['approved_budget'] ?? 0);
+        
+        // Get weightages from frontend to calculate weighted total_score
+        $weight_outcome = floatval($_POST['weightage_outcome'] ?? 1.0);
+        $weight_impact = floatval($_POST['weightage_impact'] ?? 1.0);
+        $weight_alignment = floatval($_POST['weightage_alignment'] ?? 1.0);
+        $weight_funding = floatval($_POST['weightage_funding'] ?? 1.0);
 
         if ($proposal_id <= 0) {
             echo json_encode(['success' => false, 'message' => 'Invalid proposal ID']);
@@ -201,7 +207,14 @@ elseif ($action === 'save_rubric') {
             exit();
         }
 
-        $total_score = $outcome + $impact + $alignment + $funding;
+        // Calculate weighted total_score using the same weightages as frontend
+        // Use floatval to ensure decimal precision is maintained
+        $total_score = ($outcome * $weight_outcome) + 
+                       ($impact * $weight_impact) + 
+                       ($alignment * $weight_alignment) + 
+                       ($funding * $weight_funding);
+        // Keep one decimal place for precision
+        $total_score = round($total_score, 1);
 
         // Check if rubric record exists first
         $check_query = "SELECT proposal_id FROM proposal_rubric WHERE proposal_id = ? AND hod_id = ?";
@@ -214,7 +227,8 @@ elseif ($action === 'save_rubric') {
         if ($rubric_exists) {
             // Update existing rubric record
             $rubric_update = "UPDATE proposal_rubric 
-                              SET outcome_score = ?, impact_score = ?, alignment_score = ?, funding_score = ?, total_score = ?, hod_notes = ?, is_evaluated = 1
+                              SET outcome_score = ?, impact_score = ?, alignment_score = ?, funding_score = ?, total_score = ?, hod_notes = ?, is_evaluated = 1,
+                                  weight_outcome = ?, weight_impact = ?, weight_alignment = ?, weight_funding = ?
                               WHERE proposal_id = ? AND hod_id = ?";
             
             $update_stmt = $conn->prepare($rubric_update);
@@ -224,8 +238,9 @@ elseif ($action === 'save_rubric') {
             }
 
             $update_stmt->bind_param(
-                "iiiiisii",
+                "iiiidsddddii",
                 $outcome, $impact, $alignment, $funding, $total_score, $hod_notes,
+                $weight_outcome, $weight_impact, $weight_alignment, $weight_funding,
                 $proposal_id, $hod_id
             );
             
@@ -236,8 +251,8 @@ elseif ($action === 'save_rubric') {
         } else {
             // Insert new rubric record
             $rubric_insert = "INSERT INTO proposal_rubric 
-                              (proposal_id, hod_id, outcome_score, impact_score, alignment_score, funding_score, total_score, hod_notes, is_evaluated)
-                              VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)";
+                              (proposal_id, hod_id, outcome_score, impact_score, alignment_score, funding_score, total_score, hod_notes, is_evaluated, weight_outcome, weight_impact, weight_alignment, weight_funding)
+                              VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)";
             
             $insert_stmt = $conn->prepare($rubric_insert);
             if (!$insert_stmt) {
@@ -246,8 +261,9 @@ elseif ($action === 'save_rubric') {
             }
 
             $insert_stmt->bind_param(
-                "iiiiiiis",
-                $proposal_id, $hod_id, $outcome, $impact, $alignment, $funding, $total_score, $hod_notes
+                "iiiiidsdddd",
+                $proposal_id, $hod_id, $outcome, $impact, $alignment, $funding, $total_score, $hod_notes,
+                $weight_outcome, $weight_impact, $weight_alignment, $weight_funding
             );
             
             if (!$insert_stmt->execute()) {
@@ -282,7 +298,7 @@ else {
             }
 
             $rubric = null;
-            $stmt = $conn->prepare("SELECT outcome_score, impact_score, alignment_score, funding_score, total_score, hod_notes FROM proposal_rubric WHERE proposal_id = ? AND hod_id = ?");
+            $stmt = $conn->prepare("SELECT outcome_score, impact_score, alignment_score, funding_score, total_score, hod_notes, weight_outcome, weight_impact, weight_alignment, weight_funding FROM proposal_rubric WHERE proposal_id = ? AND hod_id = ?");
             $stmt->bind_param("ii", $proposal_id, $hod_id);
             $stmt->execute();
             $res = $stmt->get_result();

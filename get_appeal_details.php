@@ -16,13 +16,6 @@ if ($proposal_id <= 0 || $appeal_id <= 0) {
     die('Invalid parameters');
 }
 
-// Fetch HOD id for rubric lookups
-$hod_stmt = $conn->prepare("SELECT id FROM users WHERE email = ? AND role = 'hod' LIMIT 1");
-$hod_stmt->bind_param("s", $_SESSION['email']);
-$hod_stmt->execute();
-$hod_row = $hod_stmt->get_result()->fetch_assoc();
-$hod_id = $hod_row['id'] ?? 0;
-
 // Fetch appeal and proposal details
 $detail_sql = "
     SELECT 
@@ -34,18 +27,15 @@ $detail_sql = "
         p.budget_requested,
         ar.id AS appeal_id,
         ar.justification,
-        ar.submitted_at,
-        pr.total_score,
-        pr.hod_notes
+        ar.submitted_at
     FROM appeal_requests ar
     JOIN proposals p ON ar.proposal_id = p.id
-    LEFT JOIN proposal_rubric pr ON pr.proposal_id = p.id AND pr.hod_id = ?
     WHERE ar.id = ? AND ar.proposal_id = ?
     LIMIT 1
 ";
 
 $detail_stmt = $conn->prepare($detail_sql);
-$detail_stmt->bind_param("iii", $hod_id, $appeal_id, $proposal_id);
+$detail_stmt->bind_param("ii", $appeal_id, $proposal_id);
 $detail_stmt->execute();
 $row = $detail_stmt->get_result()->fetch_assoc();
 
@@ -142,17 +132,6 @@ $rev_history = $history_stmt->get_result();
                 </div>
             <?php endif; ?>
 
-            <div class="evaluation-block">
-                <div class="eval-label">HOD Feedback & Score</div>
-                <?php if (!empty($row['hod_notes']) || $row['total_score'] !== null): ?>
-                    <p class="eval-meta">Total Score: <?= $row['total_score'] !== null ? (int)$row['total_score'] : 'N/A' ?></p>
-                    <?php if (!empty($row['hod_notes'])): ?>
-                        <p class="eval-text"><?= nl2br(htmlspecialchars($row['hod_notes'])) ?></p>
-                    <?php endif; ?>
-                <?php else: ?>
-                    <p class="eval-text">No prior HOD evaluation saved.</p>
-                <?php endif; ?>
-            </div>
         </div>
     </div>
 </div>
