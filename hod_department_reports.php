@@ -61,38 +61,43 @@ if (!$department_id) {
 
 $types = '';
 $params = [];
-$base_where = build_where($department_id, $start_date, $end_date, $types, $params, '', true);
+$base_where = build_where($department_id, $start_date, $end_date, $types, $params, 'p.', true);
 $types_p = $types;
 $params_p = $params;
 $base_where_p = build_where($department_id, $start_date, $end_date, $types_p, $params_p, 'p.', true);
-$research_statuses = "('APPROVED','REJECTED','APPEAL_REJECTED','RECOMMENDED','RESUBMITTED','PENDING_REVIEW','ASSIGNED','SUBMITTED','REQUIRES_AMENDMENT')";
-$full_statuses = $research_statuses;
+$active_statuses = "('APPROVED')";
+$full_statuses = "('APPROVED','REJECTED','APPEAL_REJECTED','RECOMMENDED','RESUBMITTED','PENDING_REVIEW','ASSIGNED','SUBMITTED','REQUIRES_AMENDMENT')";
 
-// Status distribution
-$status_res = run_query(
+// Department budget snapshot
+$dept_budget_res = run_query(
     $conn,
-    "SELECT p.status, COUNT(*) AS c FROM proposals p JOIN users u ON p.researcher_email = u.email $base_where AND p.status IN $full_statuses GROUP BY p.status",
+    "SELECT total_budget, available_budget FROM departments WHERE id = ?",
+    'i',
+    [$department_id]
+);
+$dept_budget = $dept_budget_res ? $dept_budget_res->fetch_assoc() : ['total_budget'=>0,'available_budget'=>0];
+
+// Proposals received (all statuses) for this department
+$received_res = run_query(
+    $conn,
+    "SELECT COUNT(*) AS total_received FROM proposals p JOIN users u ON p.researcher_email = u.email $base_where",
     $types,
     $params
 );
-$status_counts = [];
-if ($status_res) {
-    while ($row = $status_res->fetch_assoc()) {
-        $status_counts[$row['status']] = (int)$row['c'];
-    }
-}
+$received = $received_res ? $received_res->fetch_assoc() : ['total_received'=>0];
 
-// Budget overview for research projects
+// Budget overview for active (approved) projects
 $budget_res = run_query(
     $conn,
     "SELECT 
         COUNT(*) AS total_projects,
-        SUM(COALESCE(p.approved_budget,0)) AS total_approved,
-        SUM(COALESCE(p.amount_spent,0)) AS total_spent,
+        SUM(COALESCE(f.amount_allocated, p.approved_budget, 0)) AS total_approved,
+        SUM(COALESCE(f.amount_spent, p.amount_spent, 0)) AS total_spent,
         SUM(COALESCE(p.budget_requested,0)) AS total_requested
      FROM proposals p 
      JOIN users u ON p.researcher_email = u.email
-     $base_where AND p.status IN $research_statuses",
+     LEFT JOIN fund f ON f.proposal_id = p.id
+     $base_where AND p.status IN $active_statuses",
     $types,
     $params
 );
@@ -105,7 +110,7 @@ $cat_res = run_query(
      FROM budget_items b
      JOIN proposals p ON b.proposal_id = p.id
      JOIN users u ON p.researcher_email = u.email
-     $base_where_p AND p.status IN $research_statuses
+    $base_where_p AND p.status IN $active_statuses
      GROUP BY b.category",
     $types_p,
     $params_p
@@ -118,31 +123,13 @@ $trend_res = run_query(
     "SELECT DATE_FORMAT(COALESCE(p.approved_at, p.created_at), '%Y-%m') AS month, COUNT(*) AS submissions
      FROM proposals p
      JOIN users u ON p.researcher_email = u.email
-     $base_where AND p.status IN $research_statuses
+     $base_where AND p.status IN $active_statuses
      GROUP BY DATE_FORMAT(COALESCE(p.approved_at, p.created_at), '%Y-%m')
      ORDER BY month",
     $types,
     $params
 );
 $trends = $trend_res ? $trend_res->fetch_all(MYSQLI_ASSOC) : [];
-
-// Milestone progress for department projects
-$milestone_res = run_query(
-    $conn,
-    "SELECT 
-        COUNT(*) AS total_milestones,
-        SUM(CASE WHEN m.status = 'COMPLETED' THEN 1 ELSE 0 END) AS completed,
-        SUM(CASE WHEN m.status = 'IN_PROGRESS' THEN 1 ELSE 0 END) AS in_progress,
-        SUM(CASE WHEN m.status = 'PENDING' THEN 1 ELSE 0 END) AS pending,
-        SUM(CASE WHEN m.status = 'DELAYED' THEN 1 ELSE 0 END) AS delayed_count
-     FROM milestones m
-     JOIN proposals p ON m.grant_id = p.id
-     JOIN users u ON p.researcher_email = u.email
-     $base_where_p AND p.status IN $research_statuses",
-    $types_p,
-    $params_p
-);
-$milestones = $milestone_res ? $milestone_res->fetch_assoc() : ['total_milestones'=>0,'completed'=>0,'in_progress'=>0,'pending'=>0,'delayed_count'=>0];
 
 // Expenditures summary
 $exp_res = run_query(
@@ -156,7 +143,7 @@ $exp_res = run_query(
      JOIN budget_items b ON e.budget_item_id = b.id
      JOIN proposals p ON b.proposal_id = p.id
      JOIN users u ON p.researcher_email = u.email
-     $base_where_p AND p.status IN $research_statuses",
+    $base_where_p AND p.status IN $active_statuses",
     $types_p,
     $params_p
 );
@@ -229,10 +216,13 @@ function build_simple_pdf(array $lines): string {
 
 // Download handlers
 if (!empty($download_format)) {
-    $common_rows = function() use ($budget, $recent_activity) {
+    $common_rows = function() use ($budget, $recent_activity, $received, $dept_budget) {
         $rows = [
             ['Metric', 'Value'],
-            ['Total Projects', $budget['total_projects'] ?? 0],
+            ['Proposals Received', $received['total_received'] ?? 0],
+            ['Active Projects', $budget['total_projects'] ?? 0],
+            ['Department Total Budget', number_format((float)($dept_budget['total_budget'] ?? 0), 2)],
+            ['Department Balance Budget', number_format((float)($dept_budget['available_budget'] ?? 0), 2)],
             ['Approved Budget', number_format((float)($budget['total_approved'] ?? 0), 2)],
             ['Amount Spent', number_format((float)($budget['total_spent'] ?? 0), 2)],
             ['Requested Budget', number_format((float)($budget['total_requested'] ?? 0), 2)],
@@ -273,11 +263,13 @@ if (!empty($download_format)) {
     if ($download_format === 'pdf') {
         $lines = [
             'Department Report',
-            'Total Projects: ' . ($budget['total_projects'] ?? 0),
+            'Proposals Received: ' . ($received['total_received'] ?? 0),
+            'Active Projects: ' . ($budget['total_projects'] ?? 0),
+            'Department Total Budget: RM' . number_format((float)($dept_budget['total_budget'] ?? 0), 2),
+            'Department Balance Budget: RM' . number_format((float)($dept_budget['available_budget'] ?? 0), 2),
             'Approved Budget: RM' . number_format((float)($budget['total_approved'] ?? 0), 2),
             'Amount Spent: RM' . number_format((float)($budget['total_spent'] ?? 0), 2),
             'Requested Budget: RM' . number_format((float)($budget['total_requested'] ?? 0), 2),
-            'Milestones Completed: ' . ($milestones['completed'] ?? 0) . ' of ' . ($milestones['total_milestones'] ?? 0),
             'Approved Claims: RM' . number_format((float)($expenditures['approved_amount'] ?? 0), 2),
             'Pending Claims: RM' . number_format((float)($expenditures['pending_amount'] ?? 0), 2),
         ];
@@ -300,23 +292,176 @@ if (!empty($download_format)) {
     <link rel="stylesheet" href="styling/hod_pages.css">
     <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    <style>
-        .analytics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px; margin-bottom: 20px; }
-        .stat-card { background: linear-gradient(135deg, #3C5B6F 0%, #2c4555 100%); color: white; padding: 22px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.12); }
-        .stat-card.green { background: linear-gradient(135deg, #2e7d32 0%, #43a047 100%); }
-        .stat-card.orange { background: linear-gradient(135deg, #ef6c00 0%, #f9a825 100%); }
-        .stat-card h3 { margin: 0 0 8px 0; font-size: 14px; letter-spacing: 0.5px; text-transform: uppercase; opacity: 0.95; }
-        .stat-value { font-size: 38px; font-weight: 700; margin: 6px 0 4px 0; }
-        .stat-label { font-size: 12px; opacity: 0.85; }
-        .chart-container { background: #fff; padding: 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 22px; }
-        .chart-container h3 { margin: 0 0 12px 0; color: #3C5B6F; font-size: 16px; }
-        .chart-wrapper { position: relative; height: 260px; }
-        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
-        .activity-item { padding: 14px; border-left: 3px solid #3C5B6F; margin-bottom: 10px; background: #f8f9fa; border-radius: 6px; }
-        .activity-item .type { display: inline-block; padding: 3px 8px; background: #3C5B6F; color: white; border-radius: 12px; font-size: 11px; margin-right: 8px; }
-        .activity-item .date { color: #999; font-size: 12px; float: right; }
-        @media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
-    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+    .analytics-grid { 
+        display: grid; 
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); 
+        gap: 18px; 
+        margin-bottom: 20px; 
+    }
+    
+    .stat-card { 
+        background: linear-gradient(135deg, #3C5B6F 0%, #2c4555 100%); 
+        color: white; 
+        padding: 20px; 
+        border-radius: 12px; 
+        box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+        display: flex;
+        flex-direction: column;
+        min-height: 140px;
+    }
+    
+    .stat-card.green { 
+        background: linear-gradient(135deg, #2e7d32 0%, #43a047 100%); 
+    }
+    
+    .stat-card.orange { 
+        background: linear-gradient(135deg, #ef6c00 0%, #f9a825 100%); 
+    }
+    
+    .stat-card h3 { 
+        margin: 0 0 5px 0; 
+        font-size: 13px; 
+        letter-spacing: 0.5px; 
+        text-transform: uppercase; 
+        opacity: 0.95;
+        line-height: 1.3;
+        flex-shrink: 0;
+    }
+    
+    .stat-content {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        min-height: 0;
+    }
+    
+    .stat-value { 
+        font-size: 32px; 
+        font-weight: 700; 
+        line-height: 1.1; 
+        margin-bottom: 4px;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+        hyphens: auto;
+    }
+    
+    .stat-value.small {
+        font-size: 28px;
+    }
+    
+    .stat-label { 
+        font-size: 12px; 
+        opacity: 0.85; 
+        line-height: 1.2;
+    }
+    
+    .budget-comparison {
+        display: flex;
+        justify-content: space-between;
+        gap: 15px;
+        margin-top: 8px;
+    }
+    
+    .budget-item {
+        flex: 1;
+    }
+    
+    .budget-item .stat-value {
+        font-size: 26px;
+        margin-bottom: 2px;
+    }
+    
+    .budget-item .stat-label {
+        font-size: 11px;
+    }
+    
+    .date-range-display { 
+        background: #f8f9fa; 
+        padding: 12px 16px; 
+        border-radius: 8px; 
+        margin-bottom: 16px; 
+        color: #3C5B6F; 
+        font-size: 14px; 
+        border-left: 3px solid #3C5B6F; 
+    }
+    
+    .chart-container { 
+        background: #fff; 
+        padding: 20px; 
+        border-radius: 12px; 
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08); 
+        margin-bottom: 22px; 
+    }
+    
+    .chart-container h3 { 
+        margin: 0 0 12px 0; 
+        color: #3C5B6F; 
+        font-size: 16px; 
+    }
+    
+    .chart-wrapper { 
+        position: relative; 
+        height: 260px; 
+    }
+    
+    .grid-2 { 
+        display: grid; 
+        grid-template-columns: 1fr 1fr; 
+        gap: 20px; 
+        margin-bottom: 20px; 
+    }
+    
+    .activity-item { 
+        padding: 14px; 
+        border-left: 3px solid #3C5B6F; 
+        margin-bottom: 10px; 
+        background: #f8f9fa; 
+        border-radius: 6px; 
+    }
+    
+    .activity-item .type { 
+        display: inline-block; 
+        padding: 3px 8px; 
+        background: #3C5B6F; 
+        color: white; 
+        border-radius: 12px; 
+        font-size: 11px; 
+        margin-right: 8px; 
+    }
+    
+    .activity-item .date { 
+        color: #999; 
+        font-size: 12px; 
+        float: right; 
+    }
+    
+    @media (max-width: 900px) { 
+        .grid-2 { 
+            grid-template-columns: 1fr; 
+        } 
+        .analytics-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+    
+    @media (max-width: 768px) {
+        .stat-card {
+            min-height: 120px;
+            padding: 16px;
+        }
+        
+        .stat-value {
+            font-size: 28px;
+        }
+        
+        .budget-item .stat-value {
+            font-size: 22px;
+        }
+    }
+</style>
 </head>
 <body>
     <?php include 'sidebar.php'; ?>
@@ -338,90 +483,79 @@ if (!empty($download_format)) {
                 <div style="display: flex; gap: 8px;">
                     <?php $qs = ($start_date ? '&start_date=' . urlencode($start_date) : '') . ($end_date ? '&end_date=' . urlencode($end_date) : ''); ?>
                     <a href="?download=csv<?= $qs ?>" class="btn-approve-all" style="padding: 10px 14px; text-decoration: none;"><i class='bx bx-download'></i> CSV</a>
-                    <a href="?download=excel<?= $qs ?>" class="btn-approve-all" style="padding: 10px 14px; text-decoration: none;"><i class='bx bx-table'></i> Excel</a>
-                    <a href="?download=pdf<?= $qs ?>" class="btn-approve-all" style="padding: 10px 14px; text-decoration: none;"><i class='bx bxs-file-pdf'></i> PDF</a>
+                    <button type="button" class="btn-approve-all" style="padding: 10px 14px;" onclick="exportExcelWithCharts()"><i class='bx bx-table'></i> Excel</button>
+                    <button type="button" class="btn-approve-all" style="padding: 10px 14px;" onclick="exportPdfWithCharts()"><i class='bx bxs-file-pdf'></i> PDF</button>
                 </div>
             </form>
         </div>
+        
+        <?php if ($start_date || $end_date): ?>
+        <div class="date-range-display">
+            <strong>Report Period:</strong> 
+            <?= $start_date ? date('M d, Y', strtotime($start_date)) : 'Start' ?> - 
+            <?= $end_date ? date('M d, Y', strtotime($end_date)) : 'End' ?>
+        </div>
+        <?php endif; ?>
 
         <div class="analytics-grid">
             <div class="stat-card">
-                <h3><i class='bx bx-book-content'></i> Projects</h3>
-                <div class="stat-value"><?= (int)($budget['total_projects'] ?? 0) ?></div>
-                <div class="stat-label">Approved/active/archived projects in scope</div>
+                <h3><i class='bx bx-book-content'></i> Approved Proposals</h3>
+                <div class="stat-content">
+                    <div class="stat-value"><?= (int)($budget['total_projects'] ?? 0) ?> / <?= (int)($received['total_received'] ?? 0) ?></div>
+                    <div class="stat-label">Approved / Received</div>
+                </div>
             </div>
+            
             <div class="stat-card green">
                 <h3><i class='bx bx-wallet'></i> Approved Budget</h3>
-                <div class="stat-value">RM<?= number_format((float)($budget['total_approved'] ?? 0), 0) ?></div>
-                <div class="stat-label">Total allocated to department projects</div>
+                <div class="stat-content">
+                    <div class="budget-comparison">
+                        <div class="budget-item">
+                            <div class="stat-value small">RM<?= number_format((float)($budget['total_approved'] ?? 0), 0) ?></div>
+                            <div class="stat-label">Approved</div>
+                        </div>
+                        <div style="display: flex; align-items: center; justify-content: center; color: white; opacity: 0.7; font-weight: 700;">/</div>
+                        <div class="budget-item">
+                            <div class="stat-value small">RM<?= number_format((float)($dept_budget['total_budget'] ?? 0), 0) ?></div>
+                            <div class="stat-label">Total Budget</div>
+                        </div>
+                    </div>
+                </div>
             </div>
+            
             <div class="stat-card orange">
                 <h3><i class='bx bx-coin-stack'></i> Amount Spent</h3>
-                <div class="stat-value">RM<?= number_format((float)($budget['total_spent'] ?? 0), 0) ?></div>
-                <div class="stat-label">Recorded reimbursements</div>
+                <div class="stat-content">
+                    <div class="stat-value">RM<?= number_format((float)($budget['total_spent'] ?? 0), 0) ?></div>
+                    <div class="stat-label">Spent</div>
+                </div>
             </div>
         </div>
-
         <div class="grid-2">
-            <div class="chart-container">
-                <h3><i class='bx bx-pie-chart'></i> Status Distribution</h3>
-                <div class="chart-wrapper"><canvas id="statusChart"></canvas></div>
-            </div>
             <div class="chart-container">
                 <h3><i class='bx bx-bar-chart'></i> Budget by Category</h3>
                 <div class="chart-wrapper"><canvas id="categoryChart"></canvas></div>
             </div>
-        </div>
-
-        <div class="grid-2">
             <div class="chart-container">
                 <h3><i class='bx bx-line-chart'></i> Project Approvals (Monthly)</h3>
                 <div class="chart-wrapper"><canvas id="trendChart"></canvas></div>
-            </div>
-            <div class="chart-container">
-                <h3><i class='bx bx-target-lock'></i> Milestone Progress</h3>
-                <div class="chart-wrapper"><canvas id="milestoneChart"></canvas></div>
-            </div>
-        </div>
-
-        <div class="chart-container" style="margin-bottom: 20px;">
-            <h3 style="margin-bottom: 14px;"><i class='bx bx-receipt'></i> Expenditure Status</h3>
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 16px; text-align: center;">
-                <div style="padding: 12px 0;">
-                    <div style="font-size: 28px; font-weight: 700; color: #3C5B6F; margin-bottom: 4px;">
-                        <?= (int)($expenditures['total_expenditures'] ?? 0) ?>
-                    </div>
-                    <div style="font-size: 12px; color: #666;">Total Expenditures</div>
-                </div>
-                <div style="padding: 12px 0;">
-                    <div style="font-size: 28px; font-weight: 700; color: #2e7d32; margin-bottom: 4px;">
-                        RM<?= number_format((float)($expenditures['approved_amount'] ?? 0), 0) ?>
-                    </div>
-                    <div style="font-size: 12px; color: #666;">Approved Claims</div>
-                </div>
-                <div style="padding: 12px 0;">
-                    <div style="font-size: 28px; font-weight: 700; color: #f9a825; margin-bottom: 4px;">
-                        RM<?= number_format((float)($expenditures['pending_amount'] ?? 0), 0) ?>
-                    </div>
-                    <div style="font-size: 12px; color: #666;">Pending Claims</div>
-                </div>
             </div>
         </div>
 
         <div class="chart-container" style="margin-bottom: 20px;">
             <h3 style="margin-bottom: 14px;"><i class='bx bx-category'></i> Budget Utilization by Category</h3>
-            <div style="max-height: 320px; overflow-y: auto; padding-right: 8px;">
+            <div style="padding-right: 8px;">
                 <?php if (!empty($categories)): ?>
                     <?php foreach ($categories as $cat): 
                         $percentage = ($cat['allocated'] ?? 0) > 0 ? (($cat['spent'] ?? 0) / $cat['allocated']) * 100 : 0;
                     ?>
-                        <div style="margin-bottom: 14px;">
-                            <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-                                <strong><?= htmlspecialchars($cat['category']) ?></strong>
-                                <span style="color: #666; font-size: 12px;">RM<?= number_format((float)$cat['spent'], 2) ?> / RM<?= number_format((float)$cat['allocated'], 2) ?></span>
+                        <div style="margin-bottom: 12px;">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                                <strong style="font-size: 13px;"><?= htmlspecialchars($cat['category']) ?></strong>
+                                <span style="color: #666; font-size: 10px;">RM<?= number_format((float)$cat['spent'], 2) ?> / RM<?= number_format((float)$cat['allocated'], 2) ?></span>
                             </div>
-                            <div class="category-bar" style="background: #e9ecef; height: 22px; border-radius: 12px; overflow: hidden;">
-                                <div class="category-fill" style="width: <?= min($percentage, 100) ?>%; height: 100%; background: linear-gradient(90deg, #3C5B6F, #20c997); display: flex; align-items: center; padding: 0 8px; color: #fff; font-weight: 600; font-size: 11px;">
+                            <div class="category-bar" style="background: #e9ecef; height: 18px; border-radius: 12px; overflow: hidden;">
+                                <div class="category-fill" style="width: <?= min($percentage, 100) ?>%; height: 100%; background: linear-gradient(90deg, #3C5B6F, #20c997); display: flex; align-items: center; padding: 0 8px; color: #fff; font-weight: 600; font-size: 10px;">
                                     <?= round($percentage, 1) ?>%
                                 </div>
                             </div>
@@ -454,6 +588,152 @@ if (!empty($download_format)) {
     </section>
 
     <script>
+    const reportStats = {
+        proposalsReceived: <?= (int)($received['total_received'] ?? 0) ?>,
+        activeProjects: <?= (int)($budget['total_projects'] ?? 0) ?>,
+        deptTotalBudget: <?= (float)($dept_budget['total_budget'] ?? 0) ?>,
+        deptBalanceBudget: <?= (float)($dept_budget['available_budget'] ?? 0) ?>,
+        approvedBudget: <?= (float)($budget['total_approved'] ?? 0) ?>,
+        amountSpent: <?= (float)($budget['total_spent'] ?? 0) ?>,
+        requestedBudget: <?= (float)($budget['total_requested'] ?? 0) ?>,
+        startDate: '<?= htmlspecialchars($start_date) ?>',
+        endDate: '<?= htmlspecialchars($end_date) ?>'
+    };
+
+    const reportCharts = {
+        category: null,
+        trend: null
+    };
+
+    function formatMoney(value) {
+        const num = Number(value) || 0;
+        return 'RM' + num.toFixed(2);
+    }
+
+    function downloadBlob(filename, blob) {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    }
+
+    function exportExcelWithCharts() {
+        const catImg = reportCharts.category ? reportCharts.category.toBase64Image() : '';
+        const trendImg = reportCharts.trend ? reportCharts.trend.toBase64Image() : '';
+
+        const rows = [];
+        
+        if (reportStats.startDate || reportStats.endDate) {
+            const startText = reportStats.startDate ? new Date(reportStats.startDate).toLocaleDateString('en-US', {year: 'numeric', month: 'short', day: 'numeric'}) : 'Start';
+            const endText = reportStats.endDate ? new Date(reportStats.endDate).toLocaleDateString('en-US', {year: 'numeric', month: 'short', day: 'numeric'}) : 'End';
+            rows.push(['Report Period', `${startText} - ${endText}`]);
+            rows.push([]);
+        }
+        
+        rows.push(
+            ['Proposals Received', reportStats.proposalsReceived],
+            ['Active Projects', reportStats.activeProjects],
+            ['Department Total Budget', formatMoney(reportStats.deptTotalBudget)],
+            ['Department Balance Budget', formatMoney(reportStats.deptBalanceBudget)],
+            ['Approved Budget', formatMoney(reportStats.approvedBudget)],
+            ['Amount Spent', formatMoney(reportStats.amountSpent)],
+            ['Requested Budget', formatMoney(reportStats.requestedBudget)]
+        );
+
+        let tableRows = rows.map(row => `<tr><td>${row[0]}</td><td>${row[1]}</td></tr>`).join('');
+        const html = `
+            <html>
+            <head><meta charset="UTF-8"></head>
+            <body>
+                <h2>Department Report</h2>
+                <table border="1" cellpadding="6" cellspacing="0">
+                    <tr><th>Metric</th><th>Value</th></tr>
+                    ${tableRows}
+                </table>
+                ${catImg ? `<h3>Budget by Category</h3><img src="${catImg}" />` : ''}
+                ${trendImg ? `<h3>Project Approvals (Monthly)</h3><img src="${trendImg}" />` : ''}
+            </body>
+            </html>
+        `;
+
+        const blob = new Blob([html], { type: 'application/vnd.ms-excel' });
+        downloadBlob('department_report.xls', blob);
+    }
+
+    function exportPdfWithCharts() {
+        if (!window.jspdf || !window.jspdf.jsPDF) {
+            alert('PDF export is not available right now.');
+            return;
+        }
+
+        const doc = new window.jspdf.jsPDF('p', 'pt', 'a4');
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const pageHeight = doc.internal.pageSize.getHeight();
+        const margin = 40;
+        let y = 40;
+
+        doc.setFontSize(16);
+        doc.text('Department Report', margin, y);
+        y += 20;
+        doc.setFontSize(11);
+
+        const lines = [];
+        
+        if (reportStats.startDate || reportStats.endDate) {
+            const startText = reportStats.startDate ? new Date(reportStats.startDate).toLocaleDateString('en-US', {year: 'numeric', month: 'short', day: 'numeric'}) : 'Start';
+            const endText = reportStats.endDate ? new Date(reportStats.endDate).toLocaleDateString('en-US', {year: 'numeric', month: 'short', day: 'numeric'}) : 'End';
+            lines.push(`Report Period: ${startText} - ${endText}`);
+            lines.push('');
+        }
+        
+        lines.push(
+            `Proposals Received: ${reportStats.proposalsReceived}`,
+            `Active Projects: ${reportStats.activeProjects}`,
+            `Department Total Budget: ${formatMoney(reportStats.deptTotalBudget)}`,
+            `Department Balance Budget: ${formatMoney(reportStats.deptBalanceBudget)}`,
+            `Approved Budget: ${formatMoney(reportStats.approvedBudget)}`,
+            `Amount Spent: ${formatMoney(reportStats.amountSpent)}`,
+            `Requested Budget: ${formatMoney(reportStats.requestedBudget)}`
+        );
+
+        lines.forEach(line => {
+            if (y > pageHeight - margin) {
+                doc.addPage();
+                y = margin;
+            }
+            doc.text(line, margin, y);
+            y += 16;
+        });
+
+        const addChart = (title, chart) => {
+            if (!chart) return;
+            const img = chart.toBase64Image();
+            const imgWidth = pageWidth - margin * 2;
+            const imgHeight = imgWidth * 0.6;
+
+            if (y + imgHeight + 30 > pageHeight) {
+                doc.addPage();
+                y = margin;
+            }
+
+            doc.setFontSize(12);
+            doc.text(title, margin, y + 12);
+            y += 20;
+            doc.addImage(img, 'PNG', margin, y, imgWidth, imgHeight);
+            y += imgHeight + 16;
+            doc.setFontSize(11);
+        };
+
+        addChart('Budget by Category', reportCharts.category);
+        addChart('Project Approvals (Monthly)', reportCharts.trend);
+
+        doc.save('department_report.pdf');
+    }
+
     window.addEventListener('load', function() {
         const colors = {
             primary: '#3C5B6F',
@@ -464,35 +744,12 @@ if (!empty($download_format)) {
             gray: '#6c757d'
         };
 
-        // Status chart
-        const statusLabels = <?= json_encode(array_keys($status_counts)) ?>;
-        const statusData = <?= json_encode(array_values($status_counts)) ?>;
-        if (statusLabels.length) {
-            new Chart(document.getElementById('statusChart'), {
-                type: 'doughnut',
-                data: {
-                    labels: statusLabels,
-                    datasets: [{
-                        data: statusData,
-                        backgroundColor: [colors.success, colors.info, colors.warning, colors.danger, colors.primary, colors.gray],
-                        borderWidth: 2,
-                        borderColor: '#fff'
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { position: 'right', labels: { boxWidth: 12, padding: 10, font: { size: 11 } } } }
-                }
-            });
-        }
-
         // Category chart
         const catLabels = <?= json_encode(array_column($categories, 'category')) ?>;
         const catAllocated = <?= json_encode(array_map('floatval', array_column($categories, 'allocated'))) ?>;
         const catSpent = <?= json_encode(array_map('floatval', array_column($categories, 'spent'))) ?>;
         if (catLabels.length) {
-            new Chart(document.getElementById('categoryChart'), {
+            reportCharts.category = new Chart(document.getElementById('categoryChart'), {
                 type: 'bar',
                 data: {
                     labels: catLabels,
@@ -517,7 +774,7 @@ if (!empty($download_format)) {
         const trendLabels = <?= json_encode(array_column($trends, 'month')) ?>;
         const trendData = <?= json_encode(array_map('intval', array_column($trends, 'submissions'))) ?>;
         if (trendLabels.length) {
-            new Chart(document.getElementById('trendChart'), {
+            reportCharts.trend = new Chart(document.getElementById('trendChart'), {
                 type: 'line',
                 data: {
                     labels: trendLabels,
@@ -542,30 +799,6 @@ if (!empty($download_format)) {
             });
         }
 
-        // Milestone chart
-        const milestoneData = [
-            <?= intval($milestones['completed'] ?? 0) ?>,
-            <?= intval($milestones['in_progress'] ?? 0) ?>,
-            <?= intval($milestones['pending'] ?? 0) ?>,
-            <?= intval($milestones['delayed_count'] ?? 0) ?>
-        ];
-        new Chart(document.getElementById('milestoneChart'), {
-            type: 'pie',
-            data: {
-                labels: ['Completed', 'In Progress', 'Pending', 'Delayed'],
-                datasets: [{
-                    data: milestoneData,
-                    backgroundColor: [colors.success, colors.info, colors.warning, colors.danger],
-                    borderWidth: 2,
-                    borderColor: '#fff'
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { position: 'bottom', labels: { padding: 10, font: { size: 11 } } } }
-            }
-        });
     });
     </script>
 </body>
