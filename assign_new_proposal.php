@@ -109,7 +109,7 @@ if (isset($_POST['assign_appeal'])) {
                 $notif->execute();
             }
 
-            /log_activity(
+            log_activity(
                 $conn,
                 "ASSIGN_REVIEWER",                      // action
                 "APPEAL",                               // entity_type
