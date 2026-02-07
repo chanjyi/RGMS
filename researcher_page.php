@@ -643,41 +643,14 @@ $my_reports = $stmt->get_result();
         .btn-appeal { background: #e74c3c; color: white; }
         .btn-action:hover { opacity: 0.8; transform: translateY(-1px); }
         
-        /* Budget increment buttons styled like HOD rubric modal */
-        .budget-input-wrapper {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-        }
-        
-        .budget-input-wrapper input {
-            flex: 1;
-        }
-        
-        .budget-increment-btn {
-            background: #3C5B6F;
-            color: white;
-            border: none;
-            padding: 10px 12px;
+        .budget-category {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
             border-radius: 5px;
-            cursor: pointer;
-            font-size: 16px;
-            transition: 0.3s;
-            min-width: 36px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            font-size: 15px;
         }
-        
-        .budget-increment-btn:hover {
-            background: #2c4555;
-        }
-        
-        .budget-increment-btn:active {
-            transform: scale(0.95);
-        }
-        
-        /* Read-only field styling like HOD rubric modal */
+                
         .readonly-field {
             background-color: #f5f5f5 !important;
             cursor: not-allowed;
@@ -749,56 +722,57 @@ $my_reports = $stmt->get_result();
                         </div>
                     </div>
                     
-                    <h4 style="color:#3C5B6F; margin-top:20px;">Budget Breakdown by Category</h4>
-                    <div class="grid-3">
-                        <div class="input-group">
-                            <label>Equipment (RM)</label>
-                            <div class="budget-input-wrapper">
-                                <input type="number" name="budget_equipment" step="0.01" min="0" value="0" class="budget-category" onchange="calculateTotal()">
-                                <button type="button" class="budget-increment-btn" onclick="incrementBudget('budget_equipment', 100)" title="Add RM100">
-                                    <i class='bx bx-up-arrow-alt'></i>
-                                </button>
-                            </div>
-                        </div>
-                        <div class="input-group">
-                            <label>Materials (RM)</label>
-                            <div class="budget-input-wrapper">
-                                <input type="number" name="budget_materials" step="0.01" min="0" value="0" class="budget-category" onchange="calculateTotal()">
-                                <button type="button" class="budget-increment-btn" onclick="incrementBudget('budget_materials', 100)" title="Add RM100">
-                                    <i class='bx bx-up-arrow-alt'></i>
-                                </button>
-                            </div>
-                        </div>
-                        <div class="input-group">
-                            <label>Travel (RM)</label>
-                            <div class="budget-input-wrapper">
-                                <input type="number" name="budget_travel" step="0.01" min="0" value="0" class="budget-category" onchange="calculateTotal()">
-                                <button type="button" class="budget-increment-btn" onclick="incrementBudget('budget_travel', 100)" title="Add RM100">
-                                    <i class='bx bx-up-arrow-alt'></i>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="grid-2">
-                        <div class="input-group">
-                            <label>Personnel (RM)</label>
-                            <div class="budget-input-wrapper">
-                                <input type="number" name="budget_personnel" step="0.01" min="0" value="0" class="budget-category" onchange="calculateTotal()">
-                                <button type="button" class="budget-increment-btn" onclick="incrementBudget('budget_personnel', 100)" title="Add RM100">
-                                    <i class='bx bx-up-arrow-alt'></i>
-                                </button>
-                            </div>
-                        </div>
-                        <div class="input-group">
-                            <label>Other Expenses (RM)</label>
-                            <div class="budget-input-wrapper">
-                                <input type="number" name="budget_other" step="0.01" min="0" value="0" class="budget-category" onchange="calculateTotal()">
-                                <button type="button" class="budget-increment-btn" onclick="incrementBudget('budget_other', 100)" title="Add RM100">
-                                    <i class='bx bx-up-arrow-alt'></i>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
+       <h4 style="color:#3C5B6F; margin-top:20px;">Budget Breakdown by Category</h4>
+        <div class="grid-3">
+            <div class="input-group">
+                <label>Equipment (RM)</label>
+                <input type="number" name="budget_equipment" 
+                    step="0.01" min="0" value="0" 
+                    class="budget-category" 
+                    onchange="calculateTotal()" 
+                    onfocus="this.step=100;" 
+                    onblur="this.step=0.01;"
+                    title="Click arrows to increment by 100, or type precise amount">
+            </div>
+            <div class="input-group">
+                <label>Materials (RM)</label>
+                <input type="number" name="budget_materials" 
+                    step="0.01" min="0" value="0" 
+                    class="budget-category" 
+                    onchange="calculateTotal()"
+                    onfocus="this.step=100;" 
+                    onblur="this.step=0.01;">
+            </div>
+            <div class="input-group">
+                <label>Travel (RM)</label>
+                <input type="number" name="budget_travel" 
+                    step="0.01" min="0" value="0" 
+                    class="budget-category" 
+                    onchange="calculateTotal()"
+                    onfocus="this.step=100;" 
+                    onblur="this.step=0.01;">
+            </div>
+        </div>
+        <div class="grid-2">
+            <div class="input-group">
+                <label>Personnel (RM)</label>
+                <input type="number" name="budget_personnel" 
+                    step="0.01" min="0" value="0" 
+                    class="budget-category" 
+                    onchange="calculateTotal()"
+                    onfocus="this.step=100;" 
+                    onblur="this.step=0.01;">
+            </div>
+            <div class="input-group">
+                <label>Other Expenses (RM)</label>
+                <input type="number" name="budget_other" 
+                    step="0.01" min="0" value="0" 
+                    class="budget-category" 
+                    onchange="calculateTotal()"
+                    onfocus="this.step=100;" 
+                    onblur="this.step=0.01;">
+            </div>
+        </div>
                     
                     <h4 style="color:#3C5B6F; margin-top:30px; margin-bottom: 5px;">Project Milestones</h4>
                     <p style="color:#666; font-size:14px; margin-bottom: 20px;">Define key deliverables and timeline checkpoints for your project</p>
@@ -1581,13 +1555,6 @@ $my_reports = $stmt->get_result();
             document.getElementById('totalBudget').value = total.toFixed(2);
         }
         
-        // ========== BUDGET INCREMENT WITH ARROW ICONS ==========
-        function incrementBudget(fieldName, amount) {
-            var field = document.getElementsByName(fieldName)[0];
-            var currentValue = parseFloat(field.value) || 0;
-            field.value = (currentValue + amount).toFixed(2);
-            calculateTotal();
-        }
 
         // ========== MILESTONE MANAGEMENT ==========
         function addMilestone() {
