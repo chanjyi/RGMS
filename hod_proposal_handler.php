@@ -261,7 +261,7 @@ elseif ($action === 'save_rubric') {
             }
 
             $insert_stmt->bind_param(
-                "iiiiidsdddd",
+                "iiiiiidsdddd",
                 $proposal_id, $hod_id, $outcome, $impact, $alignment, $funding, $total_score, $hod_notes,
                 $weight_outcome, $weight_impact, $weight_alignment, $weight_funding
             );

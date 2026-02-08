@@ -838,7 +838,7 @@ $pending_reimbursements = $conn->query($pending_reimbursements_sql);
                     </div>
                     <h2 class="placeholder-title">No Completed/Archived Projects</h2>
                     <p class="placeholder-text">
-                        Approved and closed-out (rejected/appeal-rejected) projects will appear here.
+                        Approved and closed-out projects will appear here.
                     </p>
                 </div>
             <?php else: ?>
