@@ -70,6 +70,10 @@ $users_q = $conn->query("SELECT * FROM users ORDER BY id DESC");
         <button class="tab-btn" onclick="openTab(event, 'researchers')">
             <i class='bx bx-book-reader'></i> Researchers
         </button>
+        <button class="tab-btn" onclick="openTab(event, 'hods')">
+            <i class='bx bx-building'></i> HoD
+        </button>
+
     </div>
 
     <!-- TAB 1: ALL USERS -->
@@ -205,10 +209,42 @@ $users_q = $conn->query("SELECT * FROM users ORDER BY id DESC");
         </table>
     </div>
 
+    <!-- TAB 5: HOD -->
+    <div id="hods" class="tab-content">
+        <h3 style="color:#3C5B6F; margin-top:0;"><i class='bx bx-building'></i> HoD</h3>
+
+        <table class="styled-table">
+            <thead>
+            <tr><th>ID</th><th>Name</th><th>Email</th><th>Role</th></tr>
+            </thead>
+            <tbody>
+            <?php
+            $has = false;
+            if ($users_q) {
+                $users_q->data_seek(0);
+                while($u = $users_q->fetch_assoc()){
+                    if (strtolower($u['role'] ?? '') === 'hod'){
+                        $has = true;
+                        echo "<tr>
+                                <td>".(int)$u['id']."</td>
+                                <td>".htmlspecialchars($u['name'] ?? '-')."</td>
+                                <td>".htmlspecialchars($u['email'] ?? '-')."</td>
+                                <td><span class='badge badge-hod'>HOD</span></td>
+                              </tr>";
+                    }
+                }
+            }
+            if (!$has) echo "<tr><td colspan='4' style='text-align:center;color:#999;'>No heads of departments found.</td></tr>";
+            ?>
+            </tbody>
+        </table>
+    </div>
+
 </section>
 
 <script>
 
+// Tab functionality
 function openTab(evt, tabName) {
     var tabcontent = document.getElementsByClassName("tab-content");
     for (var i = 0; i < tabcontent.length; i++) {
